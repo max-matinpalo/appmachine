@@ -1,0 +1,113 @@
+name: AppMachine / IOS
+on:
+  push:
+    tags: [iosdev, ios]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-latest
+    environment: ${{ github.ref == 'refs/tags/iosdev' && 'Development' || 'Production' }}
+    env:
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+        fetch-depth: 0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: npm
+    - name: Preflight + install
+      run: |
+        set -euo pipefail
+        [ -n "${APP_SERVER_URL:-}" ] || { echo "APP_SERVER_URL missing" >&2; exit 1; }
+        [ -n "${APP_ID:-}" ] || { echo "APP_ID missing" >&2; exit 1; }
+        git reset --hard
+        git clean -fdx
+        npm ci --no-fund --no-audit
+        # ✨ Added @capacitor/assets to dependencies
+        npm i -D @capacitor/core @capacitor/cli @capacitor/ios @capacitor/assets --no-save --no-package-lock --no-fund --no-audit
+    - name: Prepare www + capacitor config
+      run: |
+        set -euo pipefail
+        rm -rf www
+        mkdir -p www
+        cp -R appmachine/assets/www/. www/
+        [ -f www/index.html ] || { echo "www/index.html missing" >&2; exit 1; }
+        rm -f capacitor.config.ts capacitor.config.json
+        
+        node -e '
+          const fs = require("fs");
+          const url = process.env.APP_SERVER_URL.replace(/\/$/, "");
+          const host = new URL(url).hostname;
+          const cfg = {
+            appId: process.env.APP_ID,
+            appName: process.env.APP_NAME || "App",
+            webDir: "www",
+            server: {
+              url: url,
+              cleartext: true,
+              allowNavigation: [host, "*." + host]
+            }
+          };
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2) + "\n");
+        '
+    - name: Generate iOS + Assets
+      run: |
+        set -euo pipefail
+        rm -rf ios
+        npx cap add ios
+        
+        # 🎨 Fix: Automagic Asset Generation
+        # 1. Prepare the source folder
+        mkdir -p assets
+        LOGO_SOURCE="appmachine/assets/ios/logo.png"
+        
+        if [ -f "$LOGO_SOURCE" ]; then
+          echo "✅ Found custom logo, generating assets..."
+          # Copy to standard paths expected by the tool
+          cp "$LOGO_SOURCE" assets/logo.png
+          cp "$LOGO_SOURCE" assets/logo-dark.png
+          cp "$LOGO_SOURCE" assets/splash.png
+          cp "$LOGO_SOURCE" assets/splash-dark.png
+          
+          # Generate icons and splash screens automatically
+          npx capacitor-assets generate --ios --assetPath assets
+        else
+          echo "⚠️ Custom logo not found at $LOGO_SOURCE, using defaults."
+        fi
+
+        npx cap sync ios
+        
+        xcodebuild -resolvePackageDependencies \
+          -project ios/App/App.xcodeproj \
+          -scheme App \
+          -destination 'generic/platform=iOS'
+    - name: Patch Info.plist
+      run: |
+        set -euo pipefail
+        PLIST="ios/App/App/Info.plist"
+        [ -f "$PLIST" ] || { echo "Missing $PLIST" >&2; exit 1; }
+        
+        # Remove Encryption Popup
+        /usr/libexec/PlistBuddy -c "Delete :ITSAppUsesNonExemptEncryption" "$PLIST" >/dev/null 2>&1 || true
+        /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST"
+        
+        # Allow Arbitrary Loads (HTTP)
+        /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" >/dev/null 2>&1 || true
+        /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
+        /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
+    - name: Commit + push
+      run: |
+        set -euo pipefail
+        TARGET_BRANCH="$GITHUB_REF_NAME"
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git checkout -B "$TARGET_BRANCH"
+        git add -f ios capacitor.config.json www
+        git commit --allow-empty -m "Sync iOS shell ($TARGET_BRANCH)"
+        git push -f origin "HEAD:refs/heads/$TARGET_BRANCH"

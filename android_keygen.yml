@@ -1,0 +1,61 @@
+name: Generate Android Keystore (dev/prod)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "dev or prod"
+        required: true
+        type: choice
+        options: [dev, prod]
+      password:
+        description: "Keystore + key password (same for both)"
+        required: true
+      dname:
+        description: "Distinguished name"
+        required: true
+        default: "CN=TeamFeedback, OU=Mobile, O=TeamFeedback, L=Helsinki, S=Uusimaa, C=FI"
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Generate base64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET='${{ inputs.target }}'
+          PASS='${{ inputs.password }}'
+          DNAME='${{ inputs.dname }}'
+          ALIAS='release'
+
+          JKS="release-${TARGET}.jks"
+          OUT="keystore-${TARGET}.base64.txt"
+
+          keytool -genkeypair -v \
+            -keystore "$JKS" \
+            -alias "$ALIAS" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "$PASS" \
+            -keypass "$PASS" \
+            -dname "$DNAME"
+
+          base64 -w0 "$JKS" > "$OUT"
+          echo >> "$OUT"
+
+          echo "Generated $OUT for $TARGET" >> "$GITHUB_STEP_SUMMARY"
+          echo "Alias: $ALIAS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-keystore-${{ inputs.target }}
+          path: keystore-${{ inputs.target }}.base64.txt

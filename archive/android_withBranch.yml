@@ -1,0 +1,196 @@
+name: AppMachine / Android
+on:
+  push:
+    tags: [androiddev, android]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    environment: ${{ github.ref == 'refs/tags/androiddev' && 'Development' || 'Production' }}
+    env:
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with: { fetch-depth: 0 }
+
+    - uses: actions/setup-node@v4
+      with: { node-version: lts/*, cache: npm }
+
+    - uses: actions/setup-java@v4
+      with: { distribution: temurin, java-version: "21" }
+
+    - uses: android-actions/setup-android@v3
+
+    - name: 🚀 Install & Generate
+      run: |
+        set -euo pipefail
+        
+        # 1. Preflight & Validators
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID
+        req ANDROID_KEYSTORE_BASE64; req ANDROID_KEYSTORE_PASSWORD
+        req ANDROID_KEY_ALIAS; req ANDROID_KEY_PASSWORD
+
+        # 2. Clean & Install
+        git reset --hard && git clean -fdx
+        npm install
+        npm i -D @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets \
+          --no-save --no-package-lock --no-fund --no-audit
+
+        # 3. Config & WWW
+        rm -rf www && mkdir -p www && cp -R appmachine/assets/www/. www/
+        rm -f capacitor.config.*
+        
+        node -e '
+          const fs = require("fs");
+          const { URL } = require("url"); // 🛡️ FIX: Explicit import
+          const rawUrl = process.env.APP_SERVER_URL;
+          
+          try { new URL(rawUrl); } catch { console.error("❌ Invalid URL: " + rawUrl); process.exit(1); }
+          
+          const url = rawUrl.replace(/\/$/, "");
+          const cfg = {
+            appId: process.env.APP_ID, appName: process.env.APP_NAME || "App", webDir: "www",
+            server: { url, cleartext: true, allowNavigation: [new URL(url).hostname, "*." + new URL(url).hostname] }
+          };
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
+        '
+
+        # 4. Generate Android
+        rm -rf android && npx --no-install cap add android
+        
+        mkdir -p assets
+        LOGO="appmachine/assets/icons/logo.png"
+        
+        if [ -f "$LOGO" ]; then
+          echo "✅ Custom logo found at $LOGO"
+          for f in logo logo-dark splash splash-dark; do cp "$LOGO" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --android --assetPath assets
+        else
+          echo "⚠️ Warning: Custom logo not found at $LOGO"
+        fi
+        
+        npx --no-install cap sync android
+
+    - name: 🔐 Configure Signing (Robust)
+      run: |
+        set -euo pipefail
+        
+        # 1. Decode Keystore (Sanitized)
+        printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > android/keystore.jks
+
+        # 2. Create signing.gradle (Clean, isolated config)
+        cat > android/app/signing.gradle <<EOF
+        android {
+            signingConfigs {
+                release {
+                    storeFile file("../keystore.jks")
+                    storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                    keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                    keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                }
+            }
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.release
+                }
+            }
+        }
+        EOF
+
+        # 3. Inject "apply from" (Surgical Insertion)
+        node -e '
+          const fs = require("fs"), p = "android/app/build.gradle";
+          if (!fs.existsSync(p)) process.exit(1);
+
+          let s = fs.readFileSync(p, "utf8");
+          if (s.includes("signing.gradle")) process.exit(0); // ✅ FIXED: exit(0) not return
+
+          const r = /(\s*android\s*\{)/;
+          if (!r.test(s)) { console.error("❌ No android block found"); process.exit(1); }
+
+          console.log("👉 Inserting apply from: signing.gradle...");
+          // 👇 FIXED: Added newline before $1 to prevent fusion
+          fs.writeFileSync(p, s.replace(r, "\napply from: \"signing.gradle\"\n$1"));
+        '
+        
+        echo "✅ Signing configuration applied successfully."
+
+    - name: 📦 Build & Collect
+      run: |
+        set -euo pipefail
+        chmod +x android/gradlew
+        (cd android && ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease)
+
+        mkdir -p artifacts
+        echo "🔍 searching for artifacts..."
+        
+        OUT="android/app/build/outputs"
+        
+        AAB=$(find "$OUT" -name "*-release.aab" | head -1)
+        [ -n "$AAB" ] || AAB=$(find "$OUT" -name "*.aab" -path "*release*" | head -1)
+        [ -n "$AAB" ] || { echo "❌ No .aab found" >&2; exit 1; }
+        cp "$AAB" "artifacts/app-$GITHUB_REF_NAME.aab"
+        
+        APK=$(find "$OUT" -name "*-release.apk" | head -1)
+        [ -n "$APK" ] || APK=$(find "$OUT" -name "*.apk" -path "*release*" | head -1)
+        [ -n "$APK" ] || { echo "❌ No .apk found" >&2; exit 1; }
+        cp "$APK" "artifacts/app-$GITHUB_REF_NAME.apk"
+        
+        ls -la artifacts
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: android-${{ github.ref_name }}
+        path: artifacts/*
+
+    - name: 🚢 Push Build Branch
+      run: |
+        set -euo pipefail
+
+        # 1. Clean build artifacts first
+        rm -f android/keystore.jks
+        rm -rf android/.gradle android/app/build android/build
+
+        # 2. Config Git
+        TARGET="build/$GITHUB_REF_NAME"
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+
+        # 3. 🛡️ THE "AIR GAP" STRATEGY
+        # Move vital organs to a safe container
+        echo "📦 Staging files in temp..."
+        TMP=$(mktemp -d)
+        cp -R android "$TMP/android"
+        cp -R www "$TMP/www"
+        cp capacitor.config.json "$TMP/capacitor.config.json"
+
+        # 4. Switch to orphan (Leaves files on disk!)
+        git checkout --orphan "$TARGET"
+
+        # 5. ☢️ NUKE THE SITE FROM ORBIT
+        # Remove everything in current dir except .git
+        echo "🔥 Nuking working tree..."
+        find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+
+        # 6. Restore vital organs
+        echo "🌱 Restoring clean files..."
+        cp -R "$TMP/android" ./android
+        cp -R "$TMP/www" ./www
+        cp "$TMP/capacitor.config.json" ./capacitor.config.json
+        rm -rf "$TMP"
+
+        # 7. Commit & Push
+        git add -f android www capacitor.config.json
+        git commit -m "Sync Android shell ($GITHUB_REF_NAME)"
+        git push -f origin "HEAD:refs/heads/$TARGET"

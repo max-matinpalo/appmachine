@@ -1,0 +1,159 @@
+name: AppMachine / Android
+on:
+  push:
+    tags: [androiddev, android]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    environment: ${{ github.ref == 'refs/tags/androiddev' && 'Development' || 'Production' }}
+    env:
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with: { node-version: lts/*, cache: npm }
+
+    - uses: actions/setup-java@v4
+      with: { distribution: temurin, java-version: "21" }
+
+    - uses: android-actions/setup-android@v3
+
+    - name: 🚀 Install & Generate
+      run: |
+        set -euo pipefail
+
+        # 1. Preflight
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID
+        req ANDROID_KEYSTORE_BASE64; req ANDROID_KEYSTORE_PASSWORD
+        req ANDROID_KEY_ALIAS; req ANDROID_KEY_PASSWORD
+
+        # 2. Install (lockfile-aware)
+        if [ -f package-lock.json ]; then
+          npm ci
+        else
+          npm install
+        fi
+
+        npm i -D @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets \
+          --no-save --no-package-lock --no-fund --no-audit
+
+        # 3. Config & WWW
+        rm -rf www && mkdir -p www && cp -R appmachine/assets/www/. www/
+        rm -f capacitor.config.*
+
+        node -e '
+          const fs = require("fs");
+          const { URL } = require("url");
+          const rawUrl = process.env.APP_SERVER_URL;
+
+          try { new URL(rawUrl); } catch { console.error("❌ Invalid URL: " + rawUrl); process.exit(1); }
+
+          const url = rawUrl.replace(/\/$/, "");
+          const u = new URL(url);
+          const host = u.hostname;
+
+          const cfg = {
+            appId: process.env.APP_ID,
+            appName: process.env.APP_NAME || "App",
+            webDir: "www",
+            server: {
+              url,
+              cleartext: true,
+              allowNavigation: [host, "*." + host]
+            }
+          };
+
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2) + "\n");
+        '
+
+        # 4. Generate Android
+        rm -rf android && npx --no-install cap add android
+
+        mkdir -p assets
+        LOGO="appmachine/assets/icons/logo.png"
+
+        if [ -f "$LOGO" ]; then
+          echo "✅ Custom logo found at $LOGO"
+          for f in logo logo-dark splash splash-dark; do cp "$LOGO" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --android --assetPath assets
+        else
+          echo "⚠️ Warning: Custom logo not found at $LOGO"
+        fi
+
+        npx --no-install cap sync android
+
+    - name: 🔐 Configure Signing (Robust)
+      run: |
+        set -euo pipefail
+
+        printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > android/keystore.jks
+
+        cat > android/app/signing.gradle <<EOF
+        android {
+            signingConfigs {
+                release {
+                    storeFile file("../keystore.jks")
+                    storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                    keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                    keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                }
+            }
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.release
+                }
+            }
+        }
+        EOF
+
+        node -e '
+          const fs = require("fs"), p = "android/app/build.gradle";
+          if (!fs.existsSync(p)) process.exit(1);
+
+          let s = fs.readFileSync(p, "utf8");
+          if (s.includes("signing.gradle")) process.exit(0);
+
+          const r = /(\s*android\s*\{)/;
+          if (!r.test(s)) { console.error("❌ No android block found"); process.exit(1); }
+
+          fs.writeFileSync(p, s.replace(r, "\napply from: \"signing.gradle\"\n$1"));
+        '
+
+    - name: 📦 Build & Collect
+      run: |
+        set -euo pipefail
+        chmod +x android/gradlew
+        (cd android && ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease)
+
+        mkdir -p artifacts
+        OUT="android/app/build/outputs"
+
+        AAB=$(find "$OUT" -name "*-release.aab" | head -1)
+        [ -n "$AAB" ] || AAB=$(find "$OUT" -name "*.aab" -path "*release*" | head -1)
+        [ -n "$AAB" ] || { echo "❌ No .aab found" >&2; exit 1; }
+        cp "$AAB" "artifacts/app-$GITHUB_REF_NAME.aab"
+
+        APK=$(find "$OUT" -name "*-release.apk" | head -1)
+        [ -n "$APK" ] || APK=$(find "$OUT" -name "*.apk" -path "*release*" | head -1)
+        [ -n "$APK" ] || { echo "❌ No .apk found" >&2; exit 1; }
+        cp "$APK" "artifacts/app-$GITHUB_REF_NAME.apk"
+
+        ls -la artifacts
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: android-${{ github.ref_name }}
+        path: artifacts/*

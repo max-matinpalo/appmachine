@@ -1,0 +1,90 @@
+name: AppMachine / Desktop (macOS)
+
+on:
+  push:
+    tags: [desktopdev, desktop]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    environment: ${{ github.ref == 'refs/tags/desktopdev' && 'Development' || 'Production' }}
+    env:
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Build Neutralino (no files committed)
+        run: |
+          set -euo pipefail
+
+          req () { [ -n "${2:-}" ] || { echo "$1 missing" >&2; exit 1; }; }
+          req APP_SERVER_URL "${APP_SERVER_URL:-}"
+          req APP_ID "${APP_ID:-}"
+          req APP_NAME "${APP_NAME:-}"
+
+          rm -rf .tmp_neu
+          mkdir -p .tmp_neu
+          cd .tmp_neu
+
+          npx --yes @neutralinojs/neu create appmachine
+          cd appmachine
+
+          # 1) Write redirect entry (local file -> remote URL)
+          cat > resources/index.html <<EOF
+          <!doctype html>
+          <html>
+          	<head>
+          		<meta charset="utf-8">
+          		<meta name="viewport" content="width=device-width, initial-scale=1">
+          		<title>${APP_NAME}</title>
+          	</head>
+          	<body>
+          		<script>
+          			location.replace(${APP_SERVER_URL@Q});
+          		</script>
+          	</body>
+          </html>
+          EOF
+
+          # 2) Generate Neutralino config from env
+          node -e '
+          const fs=require("fs");
+          const cfg={
+            applicationId: process.env.APP_ID,
+            defaultMode: "window",
+            url: "/resources/index.html",
+            enableNativeAPI: false,
+            modes: { window: { title: process.env.APP_NAME } }
+          };
+          fs.writeFileSync("neutralino.config.json",
+            JSON.stringify(cfg, null, 2) + "\n");
+          '
+
+          # 3) Build (zip + optional .app rename)
+          npx --yes @neutralinojs/neu build --release --macos-bundle
+
+          # 4) Pick produced zip
+          ZIP="$(ls -1 dist/*.zip | head -n 1 || true)"
+          [ -n "${ZIP:-}" ] || { echo "No zip in dist/" >&2; ls -la dist; exit 1; }
+
+          OUT="../../AppMachine-${GITHUB_REF_NAME}-macos.zip"
+          mv "$ZIP" "$OUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppMachine-${{ github.ref_name }}-macos
+          path: AppMachine-${{ github.ref_name }}-macos.zip
+          if-no-files-found: error
