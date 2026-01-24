@@ -1,0 +1,132 @@
+name: AppMachine / Desktop (macOS)
+
+on:
+  push:
+    tags: 
+      - 'desktop*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    environment: ${{ startsWith(github.ref, 'refs/tags/desktopdev') && 'Development' || 'Production' }}
+    env:
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build & Bundle App
+        run: |
+          set -euo pipefail
+
+          # --- 1. Setup ---
+          req () { [ -n "${2:-}" ] || { echo "❌ $1 missing" >&2; exit 1; }; }
+          req APP_SERVER_URL "${APP_SERVER_URL:-}"
+          req APP_ID "${APP_ID:-}"
+          req APP_NAME "${APP_NAME:-}"
+
+          rm -rf .tmp_neu
+          mkdir -p .tmp_neu
+          cd .tmp_neu
+
+          npx --yes @neutralinojs/neu@latest create appmachine --template neutralinojs/neutralinojs-minimal
+          cd appmachine
+
+          # --- 2. Generate Config (Node) ---
+          node -e '
+          const fs = require("fs");
+          const url = process.env.APP_SERVER_URL;
+          const name = process.env.APP_NAME;
+          const appId = process.env.APP_ID;
+
+          fs.writeFileSync("resources/index.html",
+            "<!doctype html><html><head><meta charset=\"utf-8\">" +
+            "<title>" + name + "</title></head>" +
+            "<body><script>location.replace(" + JSON.stringify(url) + ");</script></body></html>"
+          );
+
+          const p = "neutralino.config.json";
+          const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+          cfg.applicationId = appId;
+          cfg.enableNativeAPI = false;
+          cfg.modes = cfg.modes || {};
+          cfg.modes.window = { title: name, width: 1200, height: 800, resizable: true };
+          
+          fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+          '
+
+          # --- 3. Build Release ---
+          npx --yes @neutralinojs/neu@latest build --release
+
+          echo "🔍 Debug: Listing dist folder..."
+          ls -R dist
+
+          # --- 4. 🍎 THE BUNDLING FIX ---
+          echo "📦 Wrapping binary into .app bundle..."
+          
+          APP_BUNDLE="dist/${APP_NAME}.app"
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          mkdir -p "$APP_BUNDLE/Contents/Resources"
+
+          # Fix: Look inside dist/appmachine/ for the binaries
+          BINARY=$(find dist/appmachine -type f -name "*mac_universal" -o -name "*mac_x64" | head -n 1)
+
+          if [ -z "$BINARY" ]; then
+             echo "❌ Error: Mac Binary not found in dist/appmachine!"
+             exit 1
+          fi
+          echo "✅ Found Mac binary: $BINARY"
+
+          # Copy Binary
+          cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/${APP_NAME}"
+          chmod +x "$APP_BUNDLE/Contents/MacOS/${APP_NAME}"
+
+          # Copy Resources
+          cp dist/appmachine/resources.neu "$APP_BUNDLE/Contents/Resources/"
+          
+          # Copy Config from ROOT (Safe)
+          cp neutralino.config.json "$APP_BUNDLE/Contents/Resources/"
+
+          # Create Info.plist
+          cat <<EOF > "$APP_BUNDLE/Contents/Info.plist"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>${APP_NAME}</string>
+            <key>CFBundleIdentifier</key>
+            <string>${APP_ID}</string>
+            <key>CFBundleName</key>
+            <string>${APP_NAME}</string>
+            <key>CFBundleIconFile</key>
+            <string>icon.icns</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.13.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          # --- 5. Zip & Move (FIXED PATH) ---
+          cd dist
+          zip -r -y "AppMachine-macOS.zip" "${APP_NAME}.app"
+          
+          # 🟢 FIX: Move directly to workspace root so Upload Action finds it
+          mv "AppMachine-macOS.zip" "$GITHUB_WORKSPACE/AppMachine-${GITHUB_REF_NAME}-macos.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppMachine-${{ github.ref_name }}-macos
+          path: AppMachine-${{ github.ref_name }}-macos.zip
+          if-no-files-found: error
