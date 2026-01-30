@@ -1,6 +1,6 @@
 {
 	"name": "@max-matinpalo/appmachine",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"description": "Opinionated native iOS/Android shell generator via GitHub Actions. No local tools needed! 🤖",
 	"main": "index.js",
 	"publishConfig": {
