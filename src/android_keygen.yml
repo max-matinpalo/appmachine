@@ -11,10 +11,10 @@ on:
       password:
         description: "Keystore + key password (same for both)"
         required: true
-      dname:
-        description: "Distinguished name"
+      cn:
+        description: "Common Name (e.g. Your Name or Company)"
         required: true
-        default: "CN=TeamFeedback, OU=Mobile, O=TeamFeedback, L=Helsinki, S=Uusimaa, C=FI"
+        default: "TeamFeedback"
 
 jobs:
   gen:
@@ -32,7 +32,8 @@ jobs:
 
           TARGET='${{ inputs.target }}'
           PASS='${{ inputs.password }}'
-          DNAME='${{ inputs.dname }}'
+          # We construct the DNAME using only the Common Name (CN)
+          DNAME="CN=${{ inputs.cn }}"
           ALIAS='release'
 
           JKS="release-${TARGET}.jks"
