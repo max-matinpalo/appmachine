@@ -1,0 +1,13 @@
+{
+	"name": "@max-matinpalo/appmachine",
+	"version": "0.0.1",
+	"description": "Opinionated native iOS/Android shell generator via GitHub Actions. No local tools needed! 🤖",
+	"main": "index.js",
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	},
+	"scripts": {
+		"postinstall": "node ./scripts/install.js",
+		"release": "node ./scripts/release.js"
+	}
+}

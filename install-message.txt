@@ -1,0 +1,33 @@
+Workflows have been added to your .github/ folder! 🚀
+
+Next define in github your env variabels and secrets:
+
+	VARIABELS
+	APP_ID=dev.exmple.app
+	APP_NAME=Example
+	APP_SERVER_URL=https://example.com
+
+	SECRETS
+	ANDROID_KEYSTORE_BASE64=
+	ANDROID_KEYSTORE_PASSWORD=
+	ANDROID_KEY_ALIAS=
+	ANDROID_KEY_PASSWORD=
+
+
+🤖 ANDROID
+The android workflow builds the android binaries itself.
+That's why we need various secrets for the android.
+The .apk and .aab file which can be download from  workflow articats.
+
+There is helper workflow android_keygen.yml to generate an android_key for 
+your desired password.
+
+📱 IOS
+An ios build is triggered by setting the tag ios or ios-dev.
+The worfklow setups the capacitor project and pushes the result to ios or ios-dev branch.
+The ios build and signing itself is executed on xcode cloud.
+
+Now you must configure xcode cloud to build on push.
+The first time this setup has to be done by opening the project once in xcode.
+Then xcode will ask you to link your repo.
+

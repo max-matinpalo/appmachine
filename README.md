@@ -183,3 +183,13 @@ AppMachine is for people who want to:
 - keep `main` clean, and generate native shells as artifacts
 
 Enjoy coding. Let robots argue with build tools. 🤖🧰
+
+
+## Installing
+
+1. Copy files from this lib src to the working directory github/workflows
+2. Instruct the users to set the required environment variabeles
+3. The user starts a build by adding a tag
+
+	- git tag -f ios
+
