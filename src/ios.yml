@@ -29,14 +29,13 @@ jobs:
         git reset --hard
         git clean -fdx
         npm ci --no-fund --no-audit
-        # ✨ Added @capacitor/assets to dependencies
         npm i -D @capacitor/core @capacitor/cli @capacitor/ios @capacitor/assets --no-save --no-package-lock --no-fund --no-audit
     - name: Prepare www + capacitor config
       run: |
         set -euo pipefail
         rm -rf www
         mkdir -p www
-        cp -R appmachine/assets/www/. www/
+        cp -R appmachine/www/. www/
         [ -f www/index.html ] || { echo "www/index.html missing" >&2; exit 1; }
         rm -f capacitor.config.ts capacitor.config.json
         
@@ -62,23 +61,19 @@ jobs:
         rm -rf ios
         npx cap add ios
         
-        # 🎨 Fix: Automagic Asset Generation
-        # 1. Prepare the source folder
         mkdir -p assets
-        LOGO_SOURCE="appmachine/assets/ios/logo.png"
+        ICON_SOURCE="appmachine/icon.png"
         
-        if [ -f "$LOGO_SOURCE" ]; then
-          echo "✅ Found custom logo, generating assets..."
-          # Copy to standard paths expected by the tool
-          cp "$LOGO_SOURCE" assets/logo.png
-          cp "$LOGO_SOURCE" assets/logo-dark.png
-          cp "$LOGO_SOURCE" assets/splash.png
-          cp "$LOGO_SOURCE" assets/splash-dark.png
+        if [ -f "$ICON_SOURCE" ]; then
+          echo "✅ Found custom icon, generating assets..."
+          cp "$ICON_SOURCE" assets/logo.png
+          cp "$ICON_SOURCE" assets/logo-dark.png
+          cp "$ICON_SOURCE" assets/splash.png
+          cp "$ICON_SOURCE" assets/splash-dark.png
           
-          # Generate icons and splash screens automatically
           npx capacitor-assets generate --ios --assetPath assets
         else
-          echo "⚠️ Custom logo not found at $LOGO_SOURCE, using defaults."
+          echo "⚠️ Custom icon not found at $ICON_SOURCE, using defaults."
         fi
 
         npx cap sync ios
@@ -93,11 +88,9 @@ jobs:
         PLIST="ios/App/App/Info.plist"
         [ -f "$PLIST" ] || { echo "Missing $PLIST" >&2; exit 1; }
         
-        # Remove Encryption Popup
         /usr/libexec/PlistBuddy -c "Delete :ITSAppUsesNonExemptEncryption" "$PLIST" >/dev/null 2>&1 || true
         /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST"
         
-        # Allow Arbitrary Loads (HTTP)
         /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" >/dev/null 2>&1 || true
         /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
         /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
