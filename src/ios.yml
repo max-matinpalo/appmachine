@@ -1,106 +1,166 @@
-name: AppMachine / IOS
+name: AppMachine / iOS
 on:
   push:
     tags: [iosdev, ios]
+
 permissions:
   contents: write
+
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-26 # 👈 Updated to latest (Xcode 16+)
     environment: ${{ github.ref == 'refs/tags/iosdev' && 'Development' || 'Production' }}
     env:
       APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
       APP_ID: ${{ vars.APP_ID }}
       APP_NAME: ${{ vars.APP_NAME }}
+      IOS_CERT_BASE64: ${{ secrets.IOS_CERT_BASE64 }}
+      IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+      IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+      IOS_EXPORT_METHOD: ${{ github.ref == 'refs/tags/iosdev' && 'app-store' || 'app-store' }}
+
     steps:
     - uses: actions/checkout@v4
-      with:
-        ref: ${{ github.ref }}
-        fetch-depth: 0
+
     - uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-        cache: npm
-    - name: Preflight + install
+      with: { node-version: lts/*, cache: npm }
+
+    - name: 🚀 Install & Generate
       run: |
         set -euo pipefail
-        [ -n "${APP_SERVER_URL:-}" ] || { echo "APP_SERVER_URL missing" >&2; exit 1; }
-        [ -n "${APP_ID:-}" ] || { echo "APP_ID missing" >&2; exit 1; }
-        git reset --hard
-        git clean -fdx
-        npm ci --no-fund --no-audit
-        npm i -D @capacitor/core @capacitor/cli @capacitor/ios @capacitor/assets --no-save --no-package-lock --no-fund --no-audit
-    - name: Prepare www + capacitor config
-      run: |
-        set -euo pipefail
-        rm -rf www
-        mkdir -p www
-        cp -R appmachine/www/. www/
-        [ -f www/index.html ] || { echo "www/index.html missing" >&2; exit 1; }
-        rm -f capacitor.config.ts capacitor.config.json
         
+        # 1. Preflight
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID; req IOS_TEAM_ID; req IOS_KEYCHAIN_PASSWORD
+        req IOS_CERT_BASE64; req IOS_CERT_PASSWORD; req IOS_PROFILE_BASE64
+
+        # 2. Install
+        [ -f package-lock.json ] && npm ci || npm install
+        npm i -D @capacitor/core @capacitor/cli @capacitor/ios @capacitor/assets \
+          --no-save --no-package-lock --no-fund --no-audit
+
+        # 3. Config & WWW
+        rm -rf www && mkdir -p www && cp -R appmachine/www/. www/
+        rm -f capacitor.config.*
+
         node -e '
-          const fs = require("fs");
-          const url = process.env.APP_SERVER_URL.replace(/\/$/, "");
-          const host = new URL(url).hostname;
+          const fs = require("fs"), { URL } = require("url");
+          const raw = process.env.APP_SERVER_URL;
+          try { new URL(raw); } catch { console.error("❌ Invalid URL"); process.exit(1); }
+
+          const u = new URL(raw.replace(/\/$/, "")), host = u.hostname;
           const cfg = {
             appId: process.env.APP_ID,
             appName: process.env.APP_NAME || "App",
             webDir: "www",
             server: {
-              url: url,
-              cleartext: true,
+              url: u.href,
+              cleartext: u.protocol === "http:",
               allowNavigation: [host, "*." + host]
             }
           };
-          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2) + "\n");
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
         '
-    - name: Generate iOS + Assets
-      run: |
-        set -euo pipefail
-        rm -rf ios
-        npx cap add ios
-        
-        mkdir -p assets
-        ICON_SOURCE="appmachine/icon.png"
-        
-        if [ -f "$ICON_SOURCE" ]; then
-          echo "✅ Found custom icon, generating assets..."
-          cp "$ICON_SOURCE" assets/logo.png
-          cp "$ICON_SOURCE" assets/logo-dark.png
-          cp "$ICON_SOURCE" assets/splash.png
-          cp "$ICON_SOURCE" assets/splash-dark.png
-          
-          npx capacitor-assets generate --ios --assetPath assets
+
+        # 4. Generate (keep ios/ so Package.resolved stays stable)
+        if [ -d ios/App ]; then
+          echo "✅ iOS project exists (keeping ios/ + Package.resolved)"
         else
-          echo "⚠️ Custom icon not found at $ICON_SOURCE, using defaults."
+          npx --no-install cap add ios
         fi
 
-        npx cap sync ios
+        mkdir -p assets
+        if [ -f "appmachine/icon.png" ]; then
+          echo "✅ Custom icon found"
+          for f in logo logo-dark splash splash-dark; do cp "appmachine/icon.png" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --ios --assetPath assets
+        fi
+
+        npx --no-install cap sync ios
+
+        echo "📂 swiftpm lock (if present):"
+        ls -la ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm || true
+
+    - name: 🔐 Configure Signing
+      run: |
+        set -euo pipefail
+
+        # 1. Decode Cert
+        echo "$IOS_CERT_BASE64" | base64 -D > cert.p12
         
+        # 2. Setup Keychain
+        KC_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+        KC_PW="$RUNNER_TEMP/kc.pass"
+        echo "$IOS_KEYCHAIN_PASSWORD" > "$KC_PW"
+
+        security create-keychain -p "$(cat "$KC_PW")" "$KC_PATH"
+        security set-keychain-settings -lut 21600 "$KC_PATH"
+        security unlock-keychain -p "$(cat "$KC_PW")" "$KC_PATH"
+        security list-keychains -d user -s "$KC_PATH" login.keychain-db
+        security default-keychain -d user -s "$KC_PATH"
+
+        security import cert.p12 -k "$KC_PATH" -P "$IOS_CERT_PASSWORD" -A
+        security set-key-partition-list -S apple-tool:,apple: -s -k "$(cat "$KC_PW")" "$KC_PATH"
+        security find-identity -v -p codesigning "$KC_PATH" || true
+
+        # 3. Profile
+        echo "$IOS_PROFILE_BASE64" | base64 -D > profile.mobileprovision
+        security cms -D -i profile.mobileprovision > profile.plist
+        UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" profile.plist)
+        NAME=$(/usr/libexec/PlistBuddy -c "Print Name" profile.plist)
+        echo "✅ Profile: $NAME ($UUID)"
+
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/"$UUID".mobileprovision
+
+        # 4. Generate Export Options (Scoped to ios/App)
+        cat > ios/App/exportOptions.plist <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key><string>${IOS_EXPORT_METHOD}</string>
+            <key>teamID</key><string>${IOS_TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+                <key>${APP_ID}</key><string>${NAME}</string>
+            </dict>
+        </dict>
+        </plist>
+        EOF
+        
+        echo "PROFILE_NAME=$NAME" >> $GITHUB_ENV
+
+    - name: 📦 Build & Archive
+      run: |
+        set -euo pipefail
+
+        echo "📂 ios/App contents:"
+        ls -la ios/App
+
+        echo "🔧 Resolve SwiftPM deps (use Package.resolved)"
         xcodebuild -resolvePackageDependencies \
           -project ios/App/App.xcodeproj \
-          -scheme App \
-          -destination 'generic/platform=iOS'
-    - name: Patch Info.plist
-      run: |
-        set -euo pipefail
-        PLIST="ios/App/App/Info.plist"
-        [ -f "$PLIST" ] || { echo "Missing $PLIST" >&2; exit 1; }
-        
-        /usr/libexec/PlistBuddy -c "Delete :ITSAppUsesNonExemptEncryption" "$PLIST" >/dev/null 2>&1 || true
-        /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST"
-        
-        /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" >/dev/null 2>&1 || true
-        /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
-        /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
-    - name: Commit + push
-      run: |
-        set -euo pipefail
-        TARGET_BRANCH="$GITHUB_REF_NAME"
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
-        git checkout -B "$TARGET_BRANCH"
-        git add -f ios capacitor.config.json www
-        git commit --allow-empty -m "Sync iOS shell ($TARGET_BRANCH)"
-        git push -f origin "HEAD:refs/heads/$TARGET_BRANCH"
+          -scheme App
+
+        xcodebuild -project ios/App/App.xcodeproj -scheme App \
+          -archivePath ios/App/App.xcarchive archive \
+          -configuration Release \
+          -destination "generic/platform=iOS" \
+          CODE_SIGN_IDENTITY="Apple Distribution" \
+          CODE_SIGN_STYLE=Manual \
+          DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+          PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+
+        xcodebuild -exportArchive -archivePath ios/App/App.xcarchive \
+          -exportOptionsPlist ios/App/exportOptions.plist \
+          -exportPath output
+
+    - name: 📤 Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-build
+        path: output
