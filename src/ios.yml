@@ -8,7 +8,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-26 # 👈 Updated to latest (Xcode 16+)
+    runs-on: macos-26
+    timeout-minutes: 15
     environment: ${{ github.ref == 'refs/tags/iosdev' && 'Development' || 'Production' }}
     env:
       APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
@@ -18,30 +19,32 @@ jobs:
       IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
       IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
       IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
-      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
-      IOS_EXPORT_METHOD: ${{ github.ref == 'refs/tags/iosdev' && 'app-store' || 'app-store' }}
 
     steps:
     - uses: actions/checkout@v4
 
+    - name: 🕵️ Preflight
+      run: |
+        set -euo pipefail
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID; req APP_NAME
+        req IOS_TEAM_ID
+        req IOS_CERT_BASE64; req IOS_CERT_PASSWORD
+        req IOS_PROFILE_BASE64
+
     - uses: actions/setup-node@v4
-      with: { node-version: lts/*, cache: npm }
+      with: { node-version: lts/* }
 
     - name: 🚀 Install & Generate
       run: |
         set -euo pipefail
         
-        # 1. Preflight
-        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
-        req APP_SERVER_URL; req APP_ID; req IOS_TEAM_ID; req IOS_KEYCHAIN_PASSWORD
-        req IOS_CERT_BASE64; req IOS_CERT_PASSWORD; req IOS_PROFILE_BASE64
-
-        # 2. Install
+        # 1. Install
         [ -f package-lock.json ] && npm ci || npm install
         npm i -D @capacitor/core @capacitor/cli @capacitor/ios @capacitor/assets \
           --no-save --no-package-lock --no-fund --no-audit
 
-        # 3. Config & WWW
+        # 2. Config & WWW
         rm -rf www && mkdir -p www && cp -R appmachine/www/. www/
         rm -f capacitor.config.*
 
@@ -53,7 +56,7 @@ jobs:
           const u = new URL(raw.replace(/\/$/, "")), host = u.hostname;
           const cfg = {
             appId: process.env.APP_ID,
-            appName: process.env.APP_NAME || "App",
+            appName: process.env.APP_NAME,
             webDir: "www",
             server: {
               url: u.href,
@@ -64,7 +67,7 @@ jobs:
           fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
         '
 
-        # 4. Generate (keep ios/ so Package.resolved stays stable)
+        # 3. Generate (keep ios/ so Package.resolved stays stable)
         if [ -d ios/App ]; then
           echo "✅ iOS project exists (keeping ios/ + Package.resolved)"
         else
@@ -87,26 +90,28 @@ jobs:
       run: |
         set -euo pipefail
 
-        # 1. Decode Cert
-        echo "$IOS_CERT_BASE64" | base64 -D > cert.p12
+        # 1. Decode Cert (Safer printf)
+        printf "%s" "$IOS_CERT_BASE64" | base64 -D > cert.p12
         
-        # 2. Setup Keychain
+        # 2. Setup Keychain with Memory-Only Password
         KC_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-        KC_PW="$RUNNER_TEMP/kc.pass"
-        echo "$IOS_KEYCHAIN_PASSWORD" > "$KC_PW"
+        KC_PW="$(uuidgen)"
 
-        security create-keychain -p "$(cat "$KC_PW")" "$KC_PATH"
+        security create-keychain -p "$KC_PW" "$KC_PATH"
         security set-keychain-settings -lut 21600 "$KC_PATH"
-        security unlock-keychain -p "$(cat "$KC_PW")" "$KC_PATH"
+        security unlock-keychain -p "$KC_PW" "$KC_PATH"
         security list-keychains -d user -s "$KC_PATH" login.keychain-db
         security default-keychain -d user -s "$KC_PATH"
 
         security import cert.p12 -k "$KC_PATH" -P "$IOS_CERT_PASSWORD" -A
-        security set-key-partition-list -S apple-tool:,apple: -s -k "$(cat "$KC_PW")" "$KC_PATH"
+        
+        # FIX: Added codesign: to partition list
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PW" "$KC_PATH"
+        
         security find-identity -v -p codesigning "$KC_PATH" || true
 
-        # 3. Profile
-        echo "$IOS_PROFILE_BASE64" | base64 -D > profile.mobileprovision
+        # 3. Profile (Safer printf)
+        printf "%s" "$IOS_PROFILE_BASE64" | base64 -D > profile.mobileprovision
         security cms -D -i profile.mobileprovision > profile.plist
         UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" profile.plist)
         NAME=$(/usr/libexec/PlistBuddy -c "Print Name" profile.plist)
@@ -121,7 +126,7 @@ jobs:
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-            <key>method</key><string>${IOS_EXPORT_METHOD}</string>
+            <key>method</key><string>app-store</string>
             <key>teamID</key><string>${IOS_TEAM_ID}</string>
             <key>signingStyle</key><string>manual</string>
             <key>provisioningProfiles</key>
@@ -140,6 +145,17 @@ jobs:
 
         echo "📂 ios/App contents:"
         ls -la ios/App
+
+        # 1. Bump Build Number
+        BUILD_NUM="${{ github.run_number }}"
+        echo "🔢 Updating CFBundleVersion to: $BUILD_NUM"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" ios/App/App/Info.plist \
+          || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" ios/App/App/Info.plist
+
+        # 2. Set Non-Exempt Encryption to NO
+        echo "🚫 Setting ITSAppUsesNonExemptEncryption = NO"
+        /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist \
+          || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist
 
         echo "🔧 Resolve SwiftPM deps (use Package.resolved)"
         xcodebuild -resolvePackageDependencies \
@@ -163,4 +179,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ios-build
-        path: output
+        path: output/*.ipa
+        if-no-files-found: error

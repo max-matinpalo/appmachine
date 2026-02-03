@@ -1,4 +1,4 @@
-name: Generate Android Keystore (dev/prod)
+name: Generate Android Keystore
 
 on:
   workflow_dispatch:
@@ -8,17 +8,41 @@ on:
         required: true
         type: choice
         options: [dev, prod]
-      password:
-        description: "Keystore + key password (same for both)"
-        required: true
       cn:
-        description: "Common Name (e.g. Your Name or Company)"
+        description: "Common Name"
         required: true
-        default: "TeamFeedback"
 
 jobs:
-  gen:
+  preflight:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.target == 'prod' && 'Production' || 'Development' }}
+    steps:
+      - name: 🛑 Safety Checks
+        shell: bash
+        env:
+          PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          EXISTING_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$PASS" ]; then
+            echo "❌ Error: 'ANDROID_KEYSTORE_PASSWORD' secret is missing in this environment!"
+            exit 1
+          fi
+
+          if [ -n "$EXISTING_KEY" ]; then
+            echo "❌ Error: 'ANDROID_KEYSTORE_BASE64' secret is ALREADY set!"
+            echo "   -------------------------------------------------------------"
+            echo "   ⚠️ CRITICAL: You must use the same key to deploy updates."
+            exit 1
+          fi
+          echo "✅ Preflight passed."
+
+  gen:
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target == 'prod' && 'Production' || 'Development' }}
+
     steps:
       - uses: actions/setup-java@v4
         with:
@@ -27,20 +51,24 @@ jobs:
 
       - name: Generate base64
         shell: bash
+        env:
+          PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
 
+          # Safety check
+          if [ -z "$PASS" ]; then echo "❌ Secret missing!"; exit 1; fi
+
           TARGET='${{ inputs.target }}'
-          PASS='${{ inputs.password }}'
-          # We construct the DNAME using only the Common Name (CN)
           DNAME="CN=${{ inputs.cn }}"
           ALIAS='release'
-
           JKS="release-${TARGET}.jks"
           OUT="keystore-${TARGET}.base64.txt"
 
+          # 1. Generate Key
           keytool -genkeypair -v \
             -keystore "$JKS" \
+            -storetype JKS \
             -alias "$ALIAS" \
             -keyalg RSA \
             -keysize 2048 \
@@ -49,14 +77,37 @@ jobs:
             -keypass "$PASS" \
             -dname "$DNAME"
 
+          # 2. Encode
           base64 -w0 "$JKS" > "$OUT"
           echo >> "$OUT"
 
-          echo "Generated $OUT for $TARGET" >> "$GITHUB_STEP_SUMMARY"
-          echo "Alias: $ALIAS" >> "$GITHUB_STEP_SUMMARY"
+          # 3. Security: Delete raw binary key immediately
+          rm -f "$JKS"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-keystore-${{ inputs.target }}
           path: keystore-${{ inputs.target }}.base64.txt
+          retention-days: 1
+
+      - name: 📝 Next steps
+        shell: bash
+        run: |
+          {
+            echo "## ✅ Next steps"
+            echo "1. Download the artifact **android-keystore-${{ inputs.target }}**."
+            echo "2. Copy the Base64 string."
+            echo "3. Save it as **ANDROID_KEYSTORE_BASE64** in the **${{ inputs.target == 'prod' && 'Production' || 'Development' }}** environment secrets."
+            echo ""
+            echo "## ⚠️ Backup"
+            echo "- Store the Base64 somewhere safe."
+            echo "- Artifact expires in **24h**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup Workspace
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f keystore-*.base64.txt

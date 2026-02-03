@@ -28,21 +28,24 @@ jobs:
 
     - uses: android-actions/setup-android@v3
 
-    - name: 🚀 Install & Generate
+    - name: 🔎 Preflight Checks
       run: |
         set -euo pipefail
-
-        # 1. Preflight
         req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
         req APP_SERVER_URL; req APP_ID
         req ANDROID_KEYSTORE_BASE64; req ANDROID_KEYSTORE_PASSWORD
+        echo "✅ All required variables and secrets are present."
 
-        # 2. Install
+    - name: 📦 Install Dependencies
+      run: |
+        set -euo pipefail
         [ -f package-lock.json ] && npm ci || npm install
         npm i -D @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets \
           --no-save --no-package-lock --no-fund --no-audit
 
-        # 3. Config & WWW
+    - name: ⚙️ Generate Config & WWW
+      run: |
+        set -euo pipefail
         rm -rf www && mkdir -p www && cp -R appmachine/www/. www/
         rm -f capacitor.config.*
 
@@ -61,7 +64,9 @@ jobs:
           fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
         '
 
-        # 4. Generate
+    - name: 📱 Capacitor Sync & Assets
+      run: |
+        set -euo pipefail
         rm -rf android && npx --no-install cap add android
         mkdir -p assets
         if [ -f "appmachine/icon.png" ]; then
@@ -93,14 +98,28 @@ jobs:
         node -e '
           const fs = require("fs"), p = "android/app/build.gradle";
           if (!fs.existsSync(p)) process.exit(1);
-          let s = fs.readFileSync(p, "utf8");
-          if (!s.includes("signing.gradle")) {
-             const r = /(\s*android\s*\{)/;
-             if (r.test(s)) fs.writeFileSync(p, s.replace(r, "\napply from: \"signing.gradle\"\n$1"));
-          }
+          const s = fs.readFileSync(p, "utf8");
+          if (!s.includes("signing.gradle")) fs.appendFileSync(p, "\napply from: \"signing.gradle\"\n");
         '
 
-    - name: 📦 Build & Collect
+    - name: 🏗️ Gradle Build
       run: |
+        set -euo pipefail
         chmod +x android/gradlew
         (cd android && ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease)
+
+    - name: 📂 Flatten Artifacts
+      run: |
+        mkdir -p dist
+        # Find files recursively and copy them to the flat 'dist' folder
+        find android/app/build/outputs -name "*.apk" -exec cp {} dist/ \;
+        find android/app/build/outputs -name "*.aab" -exec cp {} dist/ \;
+        
+        echo "✅ Contents of artifacts folder:"
+        ls -l dist/
+
+    - name: 📤 Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-release
+        path: dist/*
