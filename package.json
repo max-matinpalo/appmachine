@@ -1,7 +1,7 @@
 {
 	"name": "appmachine",
 	"version": "0.0.1",
-	"description": "Native iOS/Android shell generator via GitHub Actions. No local tools needed! 🤖",
+	"description": "Native iOS/Android shell generator via GitHub Actions",
 	"author": "Max Matinpalo",
 	"type": "module",
 	"scripts": {
