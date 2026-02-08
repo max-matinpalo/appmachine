@@ -1,19 +1,9 @@
 {
-<<<<<<< HEAD
 	"name": "appmachine",
 	"version": "0.0.4",
 	"description": "Native iOS/Android shell generator via GitHub Actions",
 	"author": "Max Matinpalo",
 	"type": "module",
-=======
-	"name": "@max-matinpalo/appmachine",
-	"version": "0.1.2",
-	"description": "Opinionated native iOS/Android shell generator via GitHub Actions. No local tools needed! 🤖",
-	"main": "index.js",
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com"
-	},
->>>>>>> 329dd38 (Release 0.1.2)
 	"scripts": {
 		"install": "node ./bin/install.js"
 	}
