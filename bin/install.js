@@ -1,12 +1,14 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function die(msg) {
 	console.error("❌ " + msg);
 	process.exit(1);
 }
-
 
 // Recursively copies files or directories from source (s) to destination (d)
 function copy(s, d) {
@@ -22,7 +24,6 @@ function copy(s, d) {
 	// Otherwise, just copy the file
 	fs.copyFileSync(s, d);
 }
-
 
 // Main setup: moves GitHub workflows and AppMachine templates into the project root
 function install() {
@@ -43,7 +44,6 @@ function install() {
 	// 2. Recursively copy the template folder to /appmachine
 	if (fs.existsSync(temp)) copy(temp, mach);
 }
-
 
 try {
 	install();
