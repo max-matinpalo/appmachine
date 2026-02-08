@@ -1,0 +1,125 @@
+name: AppMachine / Android
+on:
+  push:
+    tags: [androiddev, android]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    environment: ${{ github.ref == 'refs/tags/androiddev' && 'Development' || 'Production' }}
+    env:
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with: { node-version: lts/*, cache: npm }
+
+    - uses: actions/setup-java@v4
+      with: { distribution: temurin, java-version: "21" }
+
+    - uses: android-actions/setup-android@v3
+
+    - name: 🔎 Preflight Checks
+      run: |
+        set -euo pipefail
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID
+        req ANDROID_KEYSTORE_BASE64; req ANDROID_KEYSTORE_PASSWORD
+        echo "✅ All required variables and secrets are present."
+
+    - name: 📦 Install Dependencies
+      run: |
+        set -euo pipefail
+        [ -f package-lock.json ] && npm ci || npm install
+        npm i -D @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets \
+          --no-save --no-package-lock --no-fund --no-audit
+
+    - name: ⚙️ Generate Config & WWW
+      run: |
+        set -euo pipefail
+        rm -rf www && mkdir -p www && cp -R appmachine/www/. www/
+        rm -f capacitor.config.*
+
+        node -e '
+          const fs = require("fs"), { URL } = require("url");
+          const raw = process.env.APP_SERVER_URL;
+          try { new URL(raw); } catch { console.error("❌ Invalid URL"); process.exit(1); }
+
+          const u = new URL(raw.replace(/\/$/, "")), host = u.hostname;
+          const cfg = {
+            appId: process.env.APP_ID,
+            appName: process.env.APP_NAME || "App",
+            webDir: "www",
+            server: { url: u.href, cleartext: true, allowNavigation: [host, "*." + host] }
+          };
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
+        '
+
+    - name: 📱 Capacitor Sync & Assets
+      run: |
+        set -euo pipefail
+        rm -rf android && npx --no-install cap add android
+        mkdir -p assets
+        if [ -f "appmachine/icon.png" ]; then
+          echo "✅ Custom icon found"
+          for f in logo logo-dark splash splash-dark; do cp "appmachine/icon.png" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --android --assetPath assets
+        fi
+        npx --no-install cap sync android
+
+    - name: 🔐 Configure Signing
+      run: |
+        set -euo pipefail
+        printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > android/keystore.jks
+
+        cat > android/app/signing.gradle <<EOF
+        android {
+            signingConfigs {
+                release {
+                    storeFile file("../keystore.jks")
+                    storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                    keyAlias "release"
+                    keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                }
+            }
+            buildTypes { release { signingConfig signingConfigs.release } }
+        }
+        EOF
+
+        node -e '
+          const fs = require("fs"), p = "android/app/build.gradle";
+          if (!fs.existsSync(p)) process.exit(1);
+          const s = fs.readFileSync(p, "utf8");
+          if (!s.includes("signing.gradle")) fs.appendFileSync(p, "\napply from: \"signing.gradle\"\n");
+        '
+
+    - name: 🏗️ Gradle Build
+      run: |
+        set -euo pipefail
+        chmod +x android/gradlew
+        (cd android && ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease)
+
+    - name: 📂 Flatten Artifacts
+      run: |
+        mkdir -p dist
+        # Find files recursively and copy them to the flat 'dist' folder
+        find android/app/build/outputs -name "*.apk" -exec cp {} dist/ \;
+        find android/app/build/outputs -name "*.aab" -exec cp {} dist/ \;
+        
+        echo "✅ Contents of artifacts folder:"
+        ls -l dist/
+
+    - name: 📤 Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-release
+        path: dist/*
