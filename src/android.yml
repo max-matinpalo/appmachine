@@ -14,6 +14,7 @@ jobs:
       APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
       APP_ID: ${{ vars.APP_ID }}
       APP_NAME: ${{ vars.APP_NAME }}
+      APP_VERSION: ${{ vars.APP_VERSION }} # 🆕 Added here
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
@@ -69,11 +70,22 @@ jobs:
         set -euo pipefail
         rm -rf android && npx --no-install cap add android
         mkdir -p assets
-        if [ -f "appmachine/icon.png" ]; then
-          echo "✅ Custom icon found"
-          for f in logo logo-dark splash splash-dark; do cp "appmachine/icon.png" "assets/$f.png"; done
-          npx --no-install capacitor-assets generate --android --assetPath assets
+        
+        # Smart Icon Selection
+        ICON="appmachine/icon.png"
+        if [[ "${{ github.ref }}" == "refs/tags/androiddev" && -f "appmachine/icon.dev.png" ]]; then
+          echo "🎨 Dev Build detected: Using icon.dev.png"
+          ICON="appmachine/icon.dev.png"
         fi
+
+        if [ -f "$ICON" ]; then
+          echo "✅ Generating assets from: $ICON"
+          for f in logo logo-dark splash splash-dark; do cp "$ICON" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --android --assetPath assets
+        else
+          echo "⚠️ No icon found at $ICON - skipping asset generation"
+        fi
+        
         npx --no-install cap sync android
 
     - name: 🔐 Configure Signing
@@ -100,6 +112,31 @@ jobs:
           if (!fs.existsSync(p)) process.exit(1);
           const s = fs.readFileSync(p, "utf8");
           if (!s.includes("signing.gradle")) fs.appendFileSync(p, "\napply from: \"signing.gradle\"\n");
+        '
+
+    - name: 🔧 Update Version
+      run: |
+        # Updates versionCode (to Run Number) and versionName (if APP_VERSION set)
+        node -e '
+          const fs = require("fs");
+          const p = "android/app/build.gradle";
+          let s = fs.readFileSync(p, "utf8");
+          
+          // 1. Version Code (Build Number)
+          const buildNum = process.env.GITHUB_RUN_NUMBER;
+          console.log(`🔢 Updating versionCode to: ${buildNum}`);
+          s = s.replace(/versionCode\s+\d+/, `versionCode ${buildNum}`);
+          
+          // 2. Version Name (Marketing Version) - Only if APP_VERSION is set
+          const vName = process.env.APP_VERSION;
+          if (vName) {
+             console.log(`🚀 Updating versionName to: ${vName}`);
+             s = s.replace(/versionName\s+"[^"]+"/, `versionName "${vName}"`);
+          } else {
+             console.log("ℹ️ APP_VERSION not set; keeping existing versionName");
+          }
+          
+          fs.writeFileSync(p, s);
         '
 
     - name: 🏗️ Gradle Build

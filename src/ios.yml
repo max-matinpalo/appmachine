@@ -15,6 +15,7 @@ jobs:
       APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
       APP_ID: ${{ vars.APP_ID }}
       APP_NAME: ${{ vars.APP_NAME }}
+      APP_VERSION: ${{ vars.APP_VERSION }}
       IOS_CERT_BASE64: ${{ secrets.IOS_CERT_BASE64 }}
       IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
       IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
@@ -74,11 +75,22 @@ jobs:
           npx --no-install cap add ios
         fi
 
+        # 4. Assets (Smart Icon Selection)
         mkdir -p assets
-        if [ -f "appmachine/icon.png" ]; then
-          echo "✅ Custom icon found"
-          for f in logo logo-dark splash splash-dark; do cp "appmachine/icon.png" "assets/$f.png"; done
+        ICON="appmachine/icon.png"
+
+        # Logic: If tag is "iosdev" AND "icon.dev.png" exists, use it.
+        if [[ "${{ github.ref }}" == "refs/tags/iosdev" && -f "appmachine/icon.dev.png" ]]; then
+          echo "🎨 Dev Build detected: Using icon.dev.png"
+          ICON="appmachine/icon.dev.png"
+        fi
+
+        if [ -f "$ICON" ]; then
+          echo "✅ Generating assets from: $ICON"
+          for f in logo logo-dark splash splash-dark; do cp "$ICON" "assets/$f.png"; done
           npx --no-install capacitor-assets generate --ios --assetPath assets
+        else
+          echo "⚠️ No icon found at $ICON - skipping asset generation"
         fi
 
         npx --no-install cap sync ios
@@ -146,13 +158,22 @@ jobs:
         echo "📂 ios/App contents:"
         ls -la ios/App
 
-        # 1. Bump Build Number
+        # 1. Update Marketing Version (Only if APP_VERSION exists)
+        if [ -n "${APP_VERSION:-}" ]; then
+          echo "🚀 Updating Marketing Version to: $APP_VERSION"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" ios/App/App/Info.plist \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_VERSION" ios/App/App/Info.plist
+        else
+          echo "ℹ️  APP_VERSION not set; keeping existing ShortVersionString"
+        fi
+
+        # 2. Update Build Number
         BUILD_NUM="${{ github.run_number }}"
         echo "🔢 Updating CFBundleVersion to: $BUILD_NUM"
         /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" ios/App/App/Info.plist \
           || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" ios/App/App/Info.plist
 
-        # 2. Set Non-Exempt Encryption to NO
+        # 3. Set Non-Exempt Encryption to NO
         echo "🚫 Setting ITSAppUsesNonExemptEncryption = NO"
         /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist \
           || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist
