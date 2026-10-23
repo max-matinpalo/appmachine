@@ -108,7 +108,7 @@ Commands of the `appmachine` npm package; `--channel` defaults to `production`; 
 
 ## Admin GUI
 
-- Served by the OTA server at `/admin`; plain HTML and JS.
+- Served by the OTA server at `maxapp.dev`; plain HTML and JS.
 - Behind Cloudflare Access; no own login.
 - Inspiration: Ionic Appflow's Deploy screens (builds list, channel with deployment history).
 - Shows apps, channels and releases: commit, date, rollout, downloaded, active, failed.
