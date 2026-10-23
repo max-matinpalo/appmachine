@@ -9,7 +9,7 @@ Main spec for AppMachine's own over-the-air web updates of Capacitor iOS and And
 - Updates: signed web bundles download in the background and activate safely on next launch.
 - Compatibility: a device gets only bundles compatible with its installed native build.
 - Recovery: interrupted or failed updates keep a working version and user data; a failed startup rolls back automatically.
-- Controls: multiple apps, beta and production channels, gradual rollout, pause, rollback, status reporting.
+- Controls: one app per server, beta and production channels, gradual rollout, pause, rollback, status reporting.
 - Ownership: our own API, storage and publishing tools; no vendor cloud.
 - Store review: must pass Apple App Store and Google Play review; see [Store review](#store-review).
 
@@ -99,7 +99,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## Controls
 
-- Each app has its own ID, signing key and channels `production` and `beta`.
+- One app, one server, one config: the app's ID, name, signing key and channels `production` and `beta`; another app runs its own server.
 - An app's ID is its subdomain, e.g. `tf`.
 - Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain, see [Domains](#domains).
 - A device gets the newest active release of its channel with its compatibility key.
@@ -126,8 +126,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Served by the OTA server at `maxapp.dev`; Vite and Preact, in `server/gui/`.
 - Behind Cloudflare Access; no own login.
 - Inspiration: Ionic Appflow's Deploy screens (builds list, channel with deployment history).
-- One app for now, set in the server's config with its ID, name and public key.
-- Later: app switcher and Add app, with the one-command setup in the [roadmap](../overview.md#roadmap).
+- Shows the server's one app; no app switcher.
 - Tabs Production and Beta list their releases, newest first: ID, commit, date, rollout, state, downloaded, active, failed.
 - Actions per release: set rollout, pause, resume, rollback.
 - Devices (`#devices`): a table of every device, last seen first: model, system, browser, screen, cores and RAM, opened from Home Screen or browser (and installed earlier), country and language, running release (pending one on next launch, Beta badge), last and first seen. Below 1024 px each device is a card.

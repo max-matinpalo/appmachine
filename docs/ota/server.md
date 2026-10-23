@@ -17,7 +17,7 @@ Environment variables; `.env` in development.
 | `PORT` | `3700` | Port on 127.0.0.1 |
 | `DOMAIN` | `maxapp.dev` | Admin host; app hosts are `<APP_ID>.<DOMAIN>` and `<APP_ID>-beta.<DOMAIN>` |
 | `DATA` | `/var/lib/maxapp` | Data folder |
-| `APP_ID` | `tf` | The one app for now |
+| `APP_ID` | `tf` | The server's one app; another app runs its own server |
 | `APP_NAME` | `TeamFeedback` | Shown in the GUI |
 | `APP_PUBLIC_KEY` | `{"kty":"EC",...}` | Public JWK of the app's signing key |
 | `NODE_ENV` | `production` | Otherwise development: no Access check, API docs at `/docs` |

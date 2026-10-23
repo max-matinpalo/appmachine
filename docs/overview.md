@@ -41,7 +41,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 - Next: own OTA updates, [ota/overview.md](ota/overview.md).
 - Later: one-command setup of a new app, `npx appmachine init`:
   - Settings in a committed `appmachine.json`, not GitHub variables.
-  - Creates the OTA key and Android keystore, sets the GitHub secrets with `gh` and registers the app on maxapp.dev.
+  - Creates the OTA key and Android keystore, sets the GitHub secrets with `gh` and writes the config of the app's own OTA server.
   - Development and Production share the keys; only the ID differs (`.dev`).
   - iOS: one App Store Connect API key for all apps; Xcode cloud signing on CI and TestFlight upload; no certificate or profile.
   - Android: one Play service account for all apps uploads to internal testing.
