@@ -86,13 +86,14 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 | Host | Serves | Access |
 |---|---|---|
-| `maxapp.dev` | Admin GUI | Private, Cloudflare Access |
+| `maxapp.dev` | Admin GUI, publish API | Private: Access app `MaxApp`, policies `max` and `agents` |
 | `<app>.maxapp.dev`, e.g. `tf.maxapp.dev` | The app's PWA (production), update checks, bundle files | Public |
 | `<app>-beta.maxapp.dev` | The app's beta PWA | Public |
 
 - Each app has its own origin, so PWA storage and service workers stay separate.
 - Beta uses `-beta`, not `beta.<app>`: Cloudflare's free certificate covers only one subdomain level.
 - A wildcard `*.maxapp.dev` goes through the tunnel; a new app needs no DNS change.
+- The Access app lists only `maxapp.dev`, not `*.maxapp.dev`, so app hosts stay public.
 
 ## Controls
 
@@ -109,7 +110,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 ## Publishing
 
 - `npx appmachine publish` builds the web app, computes the compatibility key, signs the file list, uploads new files and creates the release with its git commit.
-- `--channel` defaults to `production`; one admin token for our server.
+- `--channel` defaults to `production`; it authenticates with its own Access service token; the server has no auth code.
 - Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions.
 - Each store build also publishes its bundled version as a release.
 - Controls and status: [Admin GUI](#admin-gui).
