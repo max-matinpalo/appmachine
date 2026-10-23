@@ -25,6 +25,8 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 | iOS build | `src/ios.yml` | [ios.md](ios.md) |
 | Android build and keystore | `src/android.yml`, `src/android_keygen.yml` | [android.md](android.md) |
 | OTA updates | — | [ota/overview.md](ota/overview.md) |
+| OTA server and Admin GUI | `server/` | [ota/server.md](ota/server.md) |
+| Updater and publish | `ota/`, `bin/appmachine.js`, `src/web.yml` | [ota/updater.md](ota/updater.md) |
 | Known problems | — | [bugs.md](bugs.md) |
 
 ## Native features

@@ -20,7 +20,7 @@ Main spec for AppMachine's own over-the-air web updates of Capacitor iOS and And
 - Apps run from bundled local files, not from `APP_SERVER_URL`.
 - Offline data and features use web APIs (IndexedDB, Cache Storage), the same on all platforms.
 - One mechanism: iOS, Android, PWA and later desktop (Tauri) share bundles, server API, channels and updater JS; see [PWA](#pwa).
-- Server: Node.js (MaxServer).
+- Server: Node.js (MaxServer): [server.md](server.md).
 - Our server serves the bundles and the web app; Cloudflare's CDN cache absorbs download load; no object storage.
 
 ## Store review
@@ -49,7 +49,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## Activation and rollback
 
-- No native code; the updater uses only the `WebView` calls above.
+- No native code; the updater uses only the `WebView` calls above; PWA: [updater.md](updater.md).
 - At launch, a downloaded bundle starts as a trial with `setServerBasePath`.
 - It is kept with `persistServerBasePath` only after it reports ready.
 - Crash or hang before ready: the next launch opens the last kept bundle and marks the trial bad.
@@ -109,21 +109,24 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## Publishing
 
-- `npx appmachine publish` builds the web app, computes the compatibility key, signs the file list, uploads new files and creates the release with its git commit.
-- `--channel` defaults to `production`; it authenticates with its own Access service token; the server has no auth code.
-- Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions.
+- `npx appmachine publish [--channel beta] [--rollout <0–100>] [--dir dist]` runs `npm run build --if-present`, then publishes `--dir`.
+- It adds the [updater files](updater.md#files), signs the file list, uploads new files and creates the release with its compatibility key (`web` for now) and git commit (`GITHUB_SHA`, else `git rev-parse HEAD`).
+- `--channel` defaults to `production`, `--rollout` to 100.
+- Environment: `OTA_PRIVATE_KEY` (private JWK), `MAXAPP_URL` (default `https://maxapp.dev`), and `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` of its own Access service token; the server has no auth code.
+- `npx appmachine keygen` prints a new key pair: `OTA_PRIVATE_KEY` and `APP_PUBLIC_KEY`.
+- Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions: `src/web.yml`.
 - Each store build also publishes its bundled version as a release.
 - Controls and status: [Admin GUI](#admin-gui).
 
 ## Admin GUI
 
-- Served by the OTA server at `maxapp.dev`; plain HTML and JS.
+- Served by the OTA server at `maxapp.dev`; Vite and Preact, in `server/gui/`.
 - Behind Cloudflare Access; no own login.
 - Inspiration: Ionic Appflow's Deploy screens (builds list, channel with deployment history).
 - One app for now, set in the server's config with its ID, name and public key.
 - Later: app switcher and Add app, with the one-command setup in the [roadmap](../overview.md#roadmap).
-- Shows the selected app's channels and releases: commit, date, rollout, downloaded, active, failed.
-- Actions: set rollout, pause, resume, rollback.
+- Tabs Production and Beta list their releases, newest first: ID, commit, date, rollout, state, downloaded, active, failed.
+- Actions per release: set rollout, pause, resume, rollback.
 
 ## PWA
 
@@ -149,4 +152,4 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 
 ## Status
 
-Spec only; nothing is implemented. The build workflows still load the app from `APP_SERVER_URL`.
+In progress: PWA and Admin GUI first, iOS and Android later. The build workflows still load the app from `APP_SERVER_URL`.
