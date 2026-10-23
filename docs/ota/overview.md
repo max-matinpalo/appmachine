@@ -58,7 +58,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## Compatibility
 
-- Each native build has a compatibility key: a hash of the Capacitor and native plugin versions.
+- Each native build has a compatibility key: a hash of the Capacitor and native plugin versions: [native.md](native.md#compatibility-key).
 - The server sends a device only bundles with its key.
 
 ## Signing
@@ -158,7 +158,7 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 
 PWA and Admin GUI implemented and live on `maxapp.dev`, for TeamFeedback (`tf.maxapp.dev`). Not yet:
 
-- iOS and Android; their build workflows still load the app from `APP_SERVER_URL`.
+- iOS and Android: planned in [native.md](native.md), with own `_ota` build workflows.
 - Backups of the server's data folder.
 - TeamFeedback publishing: its app still registers its own service worker, and its repo has no `web` workflow or OTA secrets yet.
 - A real run of `src/web.yml`.
