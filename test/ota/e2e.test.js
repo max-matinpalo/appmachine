@@ -12,7 +12,7 @@ const port = 3800 + Math.floor(Math.random() * 100);
 const admin = `http://localhost:${port}`;
 const app = `http://demo.localhost:${port}`;
 
-test('Real server: publish, offline, update, crash rollback, server rollback, beta, GUI', async t => {
+test('Real server: publish, offline, update, crash rollback, server rollback, beta, GUI, devices', async t => {
   // 1. Build and start the real server with a fresh data folder
   const dir = await mkdtemp(`${tmpdir()}/appmachine-e2e-`);
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -34,6 +34,14 @@ test('Real server: publish, offline, update, crash rollback, server rollback, be
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })).json();
   const release = async id => (await api('/api/releases')).find(r => r.id === id);
+  async function device(expected) {
+    for (let i = 0; ; i++) {
+      const found = (await api('/api/devices')).find(d => d.id === (expected.id || d.id) && d.running === expected.running && d.staged === expected.staged);
+      if (found) return found;
+      assert.ok(i < 50, `device never reported ${JSON.stringify(expected)}`);
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
 
   // 2. Publish a version with the real CLI
   await mkdir(`${dir}/app/dist`, { recursive: true });
@@ -71,10 +79,18 @@ test('Real server: publish, offline, update, crash rollback, server rollback, be
   await page.reload();
   await waitState(page, { kept: v1, trial: v2 });
   assert.equal(await h1(), 'v1');
+  const { id } = await device({ running: v1, staged: v2 });
+  assert.equal(id, (await state(page)).device);
   await page.reload();
   assert.equal(await h1(), 'v2');
   await waitState(page, { kept: v2, trial: null, reports: [] });
   assert.equal((await release(v2)).active, 1);
+  const specs = await device({ id, running: v2, staged: null });
+  assert.match(specs.screen, /^\d+x\d+@[\d.]+$/);
+  assert.match(specs.browser, /^Chrome \d+$/);
+  assert.equal(specs.channel, 'production');
+  assert.equal(specs.standalone, false);
+  assert.ok(specs.cores > 0 && specs.language && specs.system);
 
   // 5. A release that crashes at startup is rolled back after 2 launches
   const v3 = await publish('v3', 'throw new Error("broken")');
@@ -119,6 +135,8 @@ test('Real server: publish, offline, update, crash rollback, server rollback, be
     assert.ok(i < 50, 'pause not saved');
     await new Promise(r => setTimeout(r, 100));
   }
+  await gui.getByRole('link', { name: 'Devices' }).click();
+  await gui.getByRole('table').waitFor();
+  await gui.getByRole('row').filter({ hasText: id.slice(0, 8) }).getByText(`Release ${v1}`, { exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  assert.ok((await state(page)).device);
 });

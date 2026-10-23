@@ -17,6 +17,12 @@ db.exec(`
     release INTEGER REFERENCES releases(id), device TEXT NOT NULL,
     state TEXT NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (release, device)
   );
+  CREATE TABLE IF NOT EXISTS devices (
+    id TEXT PRIMARY KEY, channel TEXT NOT NULL, running INTEGER, staged INTEGER,
+    first INTEGER NOT NULL, last INTEGER NOT NULL, agent TEXT NOT NULL, country TEXT NOT NULL,
+    screen TEXT NOT NULL, standalone INTEGER NOT NULL, installed INTEGER NOT NULL, language TEXT NOT NULL,
+    cores INTEGER, memory REAL, model TEXT NOT NULL, platform TEXT NOT NULL
+  );
 `);
 
 const summary = `SELECT r.id, r.channel, r.key, r."commit", r.created, r.rollout, r.state,

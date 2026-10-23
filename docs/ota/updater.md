@@ -36,7 +36,7 @@ Shared updater JS and the PWA service worker: check, download, verify, trial, ro
 1. Registers `/appmachine-sw.js` and asks `navigator.storage.persist()`.
 2. Ready: 2 s after `load` without an uncaught script error (`error` event on `window`).
 3. On ready with a running trial (`trial` and `tries > 0`): `kept = trial`, `trial = null`, `tries = 0`, queue `active`, delete files and manifests not in `kept`.
-4. 2 s after `load`, always: send queued reports to `/_ota/report`, then check `/_ota/check` with `device`, `current` (`trial`, else `kept`) and `key`.
+4. 2 s after `load`, always: send queued reports to `/_ota/report`, then check `/_ota/check` with `device`, `current` (`trial`, else `kept`), `key` and the device specs ([server](server.md#app-routes)).
 5. Check result 204, `trial` or a `bad` release: nothing.
 6. Check result `kept`: drop a pending `trial` (rollback before it started).
 7. New release: verify the signature, download missing files and verify each hash, store the manifest; then `trial = id`, `tries = 0`, queue `downloaded`.

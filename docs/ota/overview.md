@@ -129,6 +129,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Later: app switcher and Add app, with the one-command setup in the [roadmap](../overview.md#roadmap).
 - Tabs Production and Beta list their releases, newest first: ID, commit, date, rollout, state, downloaded, active, failed.
 - Actions per release: set rollout, pause, resume, rollback.
+- Devices (`#devices`): a table of every device, last seen first: model, system, browser, screen, cores and RAM, opened from Home Screen or browser (and installed earlier), country and language, running release (pending one on next launch, Beta badge), last and first seen. Below 1024 px each device is a card.
 
 ## PWA
 

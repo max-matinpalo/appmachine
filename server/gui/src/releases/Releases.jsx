@@ -6,7 +6,6 @@ import { ReleaseCard } from './ReleaseCard.jsx'
 import styles from './Releases.module.css'
 
 export function Releases() {
-  const [app, setApp] = useState(null)
   const [releases, setReleases] = useState(null)
   const [channel, setChannel] = useState('production')
   const [error, setError] = useState('')
@@ -19,9 +18,8 @@ export function Releases() {
     if (pending.current) return
     const current = ++sequence.current
     try {
-      const [nextApp, nextReleases] = await Promise.all([request('app'), request('releases')])
+      const nextReleases = await request('releases')
       if (current !== sequence.current) return
-      setApp(nextApp)
       setReleases(nextReleases)
       setError('')
     } catch {
@@ -65,12 +63,7 @@ export function Releases() {
   const visible = releases?.filter(release => release.channel === channel)
     .sort((a, b) => b.created - a.created || b.id - a.id)
 
-  return <main class={styles.page}>
-    <header class={styles.header}>
-      <p class={styles.brand}>AppMachine</p>
-      <h1 class={styles.app}>{app?.name || 'Releases'}</h1>
-      <p class={styles.subtitle}>Web updates</p>
-    </header>
+  return <>
     <ChannelTabs channel={channel} onChange={setChannel} />
     {error && <div class={styles.error} role="alert">
       <p>{error}</p>
@@ -86,5 +79,5 @@ export function Releases() {
           <code class={styles.command}>npx appmachine publish{channel === 'beta' ? ' --channel beta' : ''}</code>
         </div>}
     </section>
-  </main>
+  </>
 }

@@ -65,7 +65,7 @@ async function create(files = {}, extra = {}) {
 }
 function clear() {
   const db = new Database(`${prod.cwd}/DATA/ota.db`);
-  db.exec('DELETE FROM reports; DELETE FROM releases;');
+  db.exec('DELETE FROM reports; DELETE FROM releases; DELETE FROM devices;');
   db.close();
 }
 
@@ -253,6 +253,46 @@ describe('release selection and controls', () => {
     for (const body of [{ state: 'invalid' }, { rollout: 101 }, {}, { rollout: null }]) expect((await patch(id, body)).status).toBe(400);
     expect((await patch(9999, { state: 'live' })).status).toBe(404);
     expect((await patch('invalid', { state: 'live' })).status).toBe(400);
+  });
+});
+
+describe('devices', () => {
+  const pixel = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1';
+  const specs = { screen: '412x915@2.63', standalone: '1', language: 'fi-FI', cores: '8', memory: '8', model: 'Pixel 8', platform: '15.0.0' };
+
+  test('check records specs, running and offered releases; installed stays once seen', async () => {
+    clear();
+    const first = await create();
+    expect((await check({ device: 'p', ...specs }, { headers: { 'user-agent': pixel, 'cf-ipcountry': 'FI' } })).status).toBe(200);
+    expect((await check({ device: 'i', running: String(first), current: String(first), standalone: '0' }, { host: 'tf-beta.localhost', headers: { 'user-agent': iphone } })).status).toBe(204);
+    let [iPhone, android] = await json('/api/devices');
+    expect(android).toMatchObject({ id: 'p', channel: 'production', running: null, staged: first, device: 'Pixel 8', system: 'Android 15.0.0',
+      browser: 'Chrome 141', country: 'FI', screen: '412x915@2.63', standalone: true, installed: true, language: 'fi-FI', cores: 8, memory: 8 });
+    expect(iPhone).toMatchObject({ id: 'i', channel: 'beta', running: first, staged: null, device: 'iPhone', system: 'iOS 18.6', browser: 'Safari 18.6',
+      country: '', standalone: false, installed: false, cores: null, memory: null });
+    expect(android.first).toBe(android.last);
+
+    // A browser launch keeps installed; running the offered release clears the pending one.
+    await check({ device: 'p', running: String(first), standalone: '0' }, { headers: { 'user-agent': pixel } });
+    android = (await json('/api/devices'))[0];
+    expect(android).toMatchObject({ id: 'p', running: first, staged: null, standalone: false, installed: true, device: 'Android phone', system: 'Android 10' });
+    expect(android.last).toBeGreaterThanOrEqual(android.first);
+  });
+  test('a release the device marked failed is not pending; invalid specs are rejected', async () => {
+    clear();
+    const first = await create();
+    const last = await create();
+    await check({ device: 'd', running: String(first), current: String(first) });
+    expect((await json('/api/devices'))[0].staged).toBe(last);
+    await request('/_ota/report', { host: 'tf.localhost', method: 'POST', body: { device: 'd', reports: [{ release: last, state: 'failed' }] } });
+    expect((await json('/api/devices'))[0].staged).toBe(null);
+    for (const bad of [{ standalone: 'yes' }, { cores: 'many' }, { memory: '-1' }, { running: 'x' }, { screen: 'x'.repeat(101) }]) {
+      expect([JSON.stringify(bad), (await check(bad)).status]).toEqual([JSON.stringify(bad), 400]);
+    }
+    expect((await check({ newerSpec: '1' })).status).toBe(200);
+    expect((await request('/api/devices', { access: false })).status).toBe(403);
+    expect((await request('/api/devices', { host: 'tf.localhost' })).status).toBe(404);
   });
 });
 

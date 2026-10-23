@@ -12,6 +12,17 @@ const fixtures = [
   { id: 2, channel: 'production', key: 'web', commit: 'fedcba987654321', created: 1789977600000, rollout: 25, state: 'paused', downloaded: 42, active: 40, failed: 2 },
   { id: 4, channel: 'production', key: 'web', commit: 'aabbccddeeff001', created: 1789804800000, rollout: 100, state: 'rolledback', downloaded: 4, active: 0, failed: 4 },
 ]
+const minute = 60000
+const devices = now => [
+  { id: 'a1b2c3d4-0000-4000-8000-000000000001', channel: 'production', running: 2, staged: 3, first: now - 3 * 86400000, last: now - 5 * minute,
+    device: 'Pixel 8', system: 'Android 15', browser: 'Chrome 141', agent: 'Mozilla/5.0 (Linux; Android 10; K)', country: 'FI', screen: '412x915@2.63',
+    standalone: true, installed: true, language: 'fi-FI', cores: 8, memory: 8 },
+  { id: 'b1b2c3d4-0000-4000-8000-000000000002', channel: 'beta', running: 5, staged: null, first: now - 86400000, last: now - 3 * 3600000,
+    device: 'iPhone', system: 'iOS 18.6', browser: 'Safari 18.6', agent: 'Mozilla/5.0 (iPhone)', country: 'SE', screen: '390x844@3',
+    standalone: false, installed: true, language: 'sv-SE', cores: 4, memory: null },
+  { id: 'c1b2c3d4-0000-4000-8000-000000000003', channel: 'production', running: null, staged: 2, first: now - 20000, last: now - 20000,
+    device: 'Unknown', system: '', browser: '', agent: 'curl/8.5.0', country: 'XX', screen: '', standalone: false, installed: false, language: '', cores: null, memory: null },
+]
 let server, url
 
 before(async () => {
@@ -34,7 +45,7 @@ for (const [name, engine] of Object.entries({ chromium, webkit })) describe(name
 
   async function open(t, options = {}) {
     // 1. Mock the same-origin API and fail on unexpected browser errors
-    const state = { releases: structuredClone(fixtures), patches: [], gets: 0, ...options }
+    const state = { releases: structuredClone(fixtures), devices: devices(Date.now()), patches: [], gets: 0, ...options }
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'UTC' })
     page.setDefaultTimeout(5000)
     const errors = [], expectedHttpErrors = new Set()
@@ -52,6 +63,8 @@ for (const [name, engine] of Object.entries({ chromium, webkit })) describe(name
       else if (path === '/api/releases' && request.method() === 'GET') {
         state.gets++
         result = state.list ? await state.list() : { body: state.releases, status: state.listStatus || 200 }
+      } else if (path === '/api/devices' && request.method() === 'GET') {
+        result = state.deviceList ? await state.deviceList() : { body: state.devices, status: state.devicesStatus || 200 }
       } else if (/^\/api\/releases\/\d+$/.test(path) && request.method() === 'PATCH') {
         const id = Number(path.split('/').pop()), body = request.postDataJSON()
         state.patches.push({ id, body })
@@ -75,7 +88,7 @@ for (const [name, engine] of Object.entries({ chromium, webkit })) describe(name
 
     // 2. Install a controllable clock before mounting the built app
     if (options.clock) await page.clock.install()
-    await page.goto(url)
+    await page.goto(url + (options.hash || ''))
     return { page, state }
   }
 
@@ -217,9 +230,10 @@ for (const [name, engine] of Object.entries({ chromium, webkit })) describe(name
   })
 
   it('shows initial API errors and retries successfully', async t => {
-    const { page, state } = await open(t, { appStatus: 403 })
+    const { page, state } = await open(t, { appStatus: 403, listStatus: 403 })
     await page.getByRole('alert').waitFor()
     assert.equal(await page.getByRole('article').count(), 0)
+    assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Web updates')
     state.appStatus = 200
     state.listStatus = 500
     const failed = page.waitForResponse(response => response.url().endsWith('/api/releases') && response.status() === 500)
@@ -290,6 +304,60 @@ for (const [name, engine] of Object.entries({ chromium, webkit })) describe(name
       const heading = await card(page, 2).getByRole('heading').boundingBox()
       if (width < 768) assert.ok(details.y > heading.y + heading.height)
       await page.screenshot({ path: new URL(name + '-' + width + '.png', screenshots).pathname, fullPage: true })
+    }
+  })
+
+  const row = (page, name) => page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: new RegExp('^' + name) }) })
+  const cells = async locator => (await locator.locator('td').allTextContents()).map(text => text.trim())
+
+  it('lists every device with its specs, how it was opened, its version and last seen', async t => {
+    const { page } = await open(t)
+    await ready(page)
+    await page.getByRole('link', { name: 'Devices' }).click()
+    await page.getByRole('table').waitFor()
+    assert.equal(new URL(page.url()).hash, '#devices')
+    assert.equal(await page.getByRole('link', { name: 'Devices' }).getAttribute('aria-current'), 'page')
+    assert.equal(await page.getByText('3 devices · 2 installed').count(), 1)
+    assert.deepEqual(await page.getByRole('columnheader').allTextContents(), ['Device', 'System', 'Browser', 'Screen', 'Hardware', 'Opened from', 'Country', 'Version', 'Last seen'])
+    assert.deepEqual(await page.getByRole('rowheader').allTextContents(), ['Pixel 8a1b2c3d4', 'iPhoneb1b2c3d4', 'Unknownc1b2c3d4'])
+    const pixel = await cells(row(page, 'Pixel 8')), iphone = await cells(row(page, 'iPhone')), other = await cells(row(page, 'Unknown'))
+    assert.deepEqual(pixel.slice(0, 7), ['Android 15', 'Chrome 141', '412 × 915@2.63x', '8 cores · 8 GB RAM', 'Home Screen', 'Finlandfi-FI', 'Release 2Release 3 on next launch'])
+    assert.match(pixel[7], /^5 minutes agoSince \w{3} \d+, \d{4}$/)
+    assert.deepEqual(iphone.slice(2, 7), ['390 × 844@3x', '4 cores', 'BrowserAlso installed', 'Swedensv-SE', 'Release 5Beta'])
+    assert.match(iphone[7], /^3 hours ago/)
+    assert.deepEqual(other.slice(0, 7), ['Unknown', 'Unknown', 'Unknown', 'Unknown', 'Browser', 'Unknown', 'From networkRelease 2 on next launch'])
+    assert.match(other[7], /^Just now/)
+    assert.equal(await row(page, 'Pixel 8').locator('code').getAttribute('title'), 'a1b2c3d4-0000-4000-8000-000000000001')
+    await page.goBack()
+    await ready(page)
+    assert.equal(await page.getByRole('table').count(), 0)
+  })
+
+  it('opens Devices from the URL and shows loading, error with retry, and empty states', async t => {
+    const gate = deferred()
+    const { page, state } = await open(t, { hash: '#devices', deviceList: async () => { await gate.promise; return { status: 500 } } })
+    await page.getByRole('status').filter({ hasText: 'Loading devices…' }).waitFor()
+    gate.resolve()
+    await page.getByRole('alert').filter({ hasText: 'Could not load devices. Try again.' }).waitFor()
+    state.deviceList = null
+    state.devices = []
+    await page.getByRole('button', { name: 'Refresh' }).click()
+    await page.getByRole('heading', { name: 'No devices yet' }).waitFor()
+    assert.equal(await page.getByRole('alert').count(), 0)
+    state.devices = devices(Date.now()).slice(0, 1)
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await page.getByText('1 device · 1 installed').waitFor()
+  })
+
+  it('shows the device table without overflow at every width, as cards on small screens', async t => {
+    const { page } = await open(t, { hash: '#devices' })
+    await page.getByRole('table').waitFor()
+    assert.deepEqual(await checkLayout(page, page.getByRole('main')), [])
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, width + ' px has no horizontal scroll')
+      assert.equal(await page.getByRole('columnheader').first().isVisible(), width >= 1024)
+      await page.screenshot({ path: new URL(name + '-devices-' + width + '.png', screenshots).pathname, fullPage: true })
     }
   })
 })

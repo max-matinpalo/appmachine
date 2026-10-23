@@ -47,8 +47,10 @@ The request's host, without port, picks the role:
 |---|---|
 | `releases` | `id` integer primary key, `channel`, `key`, `manifest`, `signature`, `commit`, `created` (ms), `rollout` (0–100), `state` (`live`, `paused`, `rolledback`) |
 | `reports` | `release`, `device`, `state` (`downloaded`, `active`, `failed`), `time` (ms); primary key `release, device` |
+| `devices` | `id` primary key, `channel`, `running`, `staged`, `first`, `last` (ms), `agent` (User-Agent), `country` (`Cf-IPCountry`), `screen`, `standalone`, `installed`, `language`, `cores`, `memory`, `model`, `platform` |
 
 - A report replaces the device's earlier state for that release.
+- Each check upserts the device: `running` from the check, `staged` = the release the check returns if it differs from `running`. `installed` stays 1 once a launch was `standalone`.
 
 ## Releases
 
@@ -62,11 +64,12 @@ The request's host, without port, picks the role:
 
 | Route | Result |
 |---|---|
-| `GET /_ota/check?device=&current=&key=` | 200 `{ id, manifest, signature }` of the device's release, or 204; `Cache-Control: no-store` |
+| `GET /_ota/check?device=&current=&key=` + specs | 200 `{ id, manifest, signature }` of the device's release, or 204; records the device; `Cache-Control: no-store` |
 | `GET /_ota/files/<sha256>[.<ext>]` | The file; type from `ext`; `Cache-Control: public, max-age=31536000, immutable`; 404 if missing |
 | `POST /_ota/report` `{ device, reports: [{ release, state }] }` | 204; unknown releases are ignored |
 | `GET /*` | The first-visit release's file for the path |
 
+- Check specs, all optional: `running` (release ID this launch runs from cache, empty from network), `screen` (`390x844@3`), `standalone` (`0`/`1`), `language`, `cores`, `memory` (GB), `model`, `platform` (client hints). Unknown fields are dropped, so newer apps can send more.
 - `GET /*`: `/` and folders serve their `index.html`; a path not in the manifest whose last segment has no `.` serves `index.html` (SPA); otherwise 404; no release: 404.
 - `GET /*` sends `Cache-Control: public, max-age=60, stale-if-error=86400` and the type from the path's extension.
 
@@ -75,6 +78,7 @@ The request's host, without port, picks the role:
 | Route | Result |
 |---|---|
 | `GET /api/app` | `{ id, name }` |
+| `GET /api/devices` | All devices, last seen first: the `devices` columns, with `device`, `system` and `browser` named from `agent`, `model` and `platform`; `staged` is null if the device reported it failed |
 | `GET /api/releases` | All releases, newest first: `{ id, channel, key, commit, created, rollout, state, downloaded, active, failed }`; counts from `reports` |
 | `POST /api/files/missing` `{ hashes }` | `{ missing }`: the hashes not stored |
 | `PUT /api/files/<sha256>`, raw body (`application/octet-stream`) | 204; 400 if the body's hash differs |

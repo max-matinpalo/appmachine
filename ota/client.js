@@ -86,8 +86,16 @@
       await save(cache, state);
     }
 
-    // 3. Check for a release or a rollback, then stage the next launch.
-    const query = new URLSearchParams({ device: state.device, current: state.trial || state.kept || '', key: APPMACHINE.key });
+    // 3. Check for a release or a rollback with this launch's specs, then stage the next launch.
+    const hints = await navigator.userAgentData?.getHighEntropyValues(['model', 'platformVersion']).catch(() => {}) || {};
+    const query = new URLSearchParams({
+      device: state.device, current: state.trial || state.kept || '', key: APPMACHINE.key,
+      running: navigator.serviceWorker.controller && (initial.trial && initial.tries > 0 ? initial.trial : initial.kept) || '',
+      screen: `${screen.width}x${screen.height}@${+devicePixelRatio.toFixed(2)}`,
+      standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? '1' : '0',
+      language: navigator.language || '', cores: navigator.hardwareConcurrency || '', memory: navigator.deviceMemory || '',
+      model: hints.model || '', platform: hints.platformVersion || '',
+    });
     const response = await fetch(`/_ota/check?${query}`, { cache: 'no-store' });
     if (response.status === 204) return;
     if (!response.ok) throw Error('Check failed');

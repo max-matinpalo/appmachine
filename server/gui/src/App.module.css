@@ -1,0 +1,13 @@
+.page { max-width: 1120px; margin: 0 auto; padding: var(--space-12) var(--space-8); }
+.header { margin-bottom: var(--space-6); }
+.brand { margin-bottom: var(--space-3); color: var(--muted); font-size: var(--secondary); font-weight: 600; }
+.app { color: var(--text); font-size: var(--title); font-weight: 600; letter-spacing: -1px; overflow-wrap: anywhere; }
+.nav { display: inline-flex; gap: var(--space-1); margin-top: var(--space-4); padding: var(--space-1); border-radius: 8px; background: var(--subtle); }
+.link { display: flex; align-items: center; min-height: 40px; padding: 0 var(--space-4); border-radius: 6px; color: var(--muted); font-size: var(--secondary); font-weight: 600; text-decoration: none; }
+.link[aria-current="page"] { color: var(--text); background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 767px) {
+  .page { padding: var(--space-6) var(--space-4); }
+  .app { font-size: var(--heading); letter-spacing: 0; }
+}
