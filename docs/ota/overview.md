@@ -82,6 +82,33 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Server down: update checks fail and the app keeps its current bundle.
 - Back up the server's data folder: bundles and release database.
 
+## Controls
+
+- Each app has its own ID, signing key and channels `production` and `beta`.
+- Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain (`beta.` prefix).
+- A device gets the newest active release of its channel with its compatibility key.
+- Rollout: a percentage per release; a device is in when `hash(deviceId + releaseId) % 100 < rollout`, so raising it only adds devices.
+- Pause: devices without the release stop getting it; devices with it keep it.
+- Rollback: the server offers the previous release again; devices switch on next launch.
+- Status: each device reports downloaded, active or failed per release, queued while offline.
+- The device ID is a random UUID; no personal data.
+
+## Publishing
+
+Commands of the `appmachine` npm package; `--channel` defaults to `production`; one admin token for our server.
+
+| Command | Does |
+|---|---|
+| `npx appmachine keys` | Creates the app's signing key pair once |
+| `npx appmachine publish` | Builds the web app, computes the compatibility key, signs the file list, uploads new files, creates the release |
+| `npx appmachine rollout <percent>` | Sets the newest release's rollout |
+| `npx appmachine pause`, `resume`, `rollback` | Controls the newest release |
+| `npx appmachine status` | Shows downloaded, active and failed per release |
+
+- Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions.
+- Each store build also publishes its bundled version as a release.
+- No dashboard.
+
 ## PWA
 
 The same web app in the browser, optionally installed with its own window and icon; no Capacitor or Tauri. Stays alongside the store and desktop apps, with the same offline support and OTA updates.

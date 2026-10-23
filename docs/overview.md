@@ -7,7 +7,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 - Configure once, push a tag, download a signed app.
 - No Xcode, Android Studio or Capacitor on the developer's machine.
 - Vision: one web app built for every device: iOS, Android, desktop (Tauri) and web.
-- Status: not ready for mainstream use; inspiration for advanced developers.
+- Internal tool for our apps; published on npm, but only has to work for us.
 
 ## How it works
 
