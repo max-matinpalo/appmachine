@@ -97,7 +97,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 ## Controls
 
 - Each app has its own ID, signing key and channels `production` and `beta`.
-- A new app appears on its first publish; its ID is its subdomain, e.g. `tf`; no server setup.
+- Apps are added in the [Admin GUI](#admin-gui); an app's ID is its subdomain, e.g. `tf`.
 - Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain, see [Domains](#domains).
 - A device gets the newest active release of its channel with its compatibility key.
 - Rollout: a percentage per release; a device is in when `hash(deviceId + releaseId) % 100 < rollout`, so raising it only adds devices.
@@ -108,12 +108,8 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## Publishing
 
-Commands of the `appmachine` npm package; `--channel` defaults to `production`; one admin token for our server.
-
-| Command | Does |
-|---|---|
-| `npx appmachine keys` | Creates the app's signing key pair once |
-| `npx appmachine publish` | Builds the web app, computes the compatibility key, signs the file list, uploads new files, creates the release with its git commit |
+- `npx appmachine publish` builds the web app, computes the compatibility key, signs the file list, uploads new files and creates the release with its git commit.
+- `--channel` defaults to `production`; one admin token for our server.
 
 - Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions.
 - Each store build also publishes its bundled version as a release.
@@ -124,7 +120,9 @@ Commands of the `appmachine` npm package; `--channel` defaults to `production`; 
 - Served by the OTA server at `maxapp.dev`; plain HTML and JS.
 - Behind Cloudflare Access; no own login.
 - Inspiration: Ionic Appflow's Deploy screens (builds list, channel with deployment history).
-- Shows apps, channels and releases: commit, date, rollout, downloaded, active, failed.
+- App switcher at the top, with Add app.
+- Add app: enter ID and name; the browser creates the signing key pair and shows the GitHub secret and variable to copy; the server stores only the public key.
+- Shows the selected app's channels and releases: commit, date, rollout, downloaded, active, failed.
 - Actions: set rollout, pause, resume, rollback.
 
 ## PWA
