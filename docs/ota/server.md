@@ -6,7 +6,7 @@ Node API (MaxServer on Bun) that stores releases, answers update checks and serv
 
 - `server/` in this repo, not part of the npm package.
 - MaxServer project: routes in `server/src/`, Admin GUI in `server/gui/` (Vite and Preact, built to `server/gui/dist/`).
-- Tests: `bun test` in `server/`.
+- Tests: `bun test` in `server/`; end to end with updater, publish and GUI: `node --test --test-reporter=spec test/ota/e2e.test.js` from the repo root.
 
 ## Config
 
@@ -84,6 +84,15 @@ The request's host, without port, picks the role:
 
 - `channel`: `production` or `beta`.
 - Request bodies up to 100 MB, Cloudflare's limit.
+
+## Deploy
+
+- Runs on hp83: service `maxapp` (user `maxapp`, code in `/opt/maxapp`, data in `/var/lib/maxapp`).
+- Cloudflare Tunnel `maxapp-hp83`, service `cloudflared`: `maxapp.dev` and `*.maxapp.dev` to `127.0.0.1:3700`.
+- Machine setup, once: `server/deploy/setup.sh` as root with `MAXAPP_TUNNEL_TOKEN` (MaxAgents secret).
+- Deploy: `server/deploy/deploy.sh` in the main copy; config in `server/deploy/app.env`.
+- The `demo` app's private key: MaxAgents secret `OTA_PRIVATE_KEY`.
+- Moving to another machine: copy `/var/lib/maxapp`, run both scripts there, stop the services here.
 
 ## Status
 

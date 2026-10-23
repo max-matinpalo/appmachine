@@ -74,7 +74,9 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 ## Delivery
 
 - Bundle files have immutable hash URLs: `Cache-Control: public, max-age=31536000, immutable`.
-- A Cloudflare cache rule caches them; by default Cloudflare skips files without known extensions.
+- File URLs end with the path's extension, e.g. `.js`, so the server knows the type.
+- A Cloudflare page rule, Cache Everything on `*.maxapp.dev/*`, caches app hosts as the server's `Cache-Control` says; `maxapp.dev` is not cached.
+- Browser Cache TTL is "respect existing headers", so browsers follow the server too.
 - Update checks are never cached.
 - `index.html`, service worker and web manifest: short cache with `stale-if-error`, so first visits work while the server is down.
 - Cloudflare Tiered Cache on (free): fewer requests reach our server.
@@ -152,4 +154,9 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 
 ## Status
 
-Admin GUI implemented. PWA in progress; iOS and Android later. The build workflows still load the app from `APP_SERVER_URL`.
+PWA and Admin GUI implemented and live on `maxapp.dev`, with the test app `demo`. Not yet:
+
+- iOS and Android; their build workflows still load the app from `APP_SERVER_URL`.
+- Backups of the server's data folder.
+- Publish's own Access service token; the agents' token works meanwhile.
+- A real run of `src/web.yml`.
