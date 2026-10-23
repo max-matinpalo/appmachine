@@ -1,6 +1,6 @@
 # Native updater
 
-Plan: OTA updates in the iOS and Android apps, built by their own `_ota` workflows.
+OTA updates in the iOS and Android apps, built by their own `_ota` workflows.
 
 ## Workflows
 
@@ -28,7 +28,7 @@ Same as [build.md](../build.md#steps), except:
 
 ## Project setup
 
-- The web app lists `@capacitor/core` and `@capacitor/filesystem` in `package.json`; its lockfile pins every Capacitor package.
+- The web app lists `@capacitor/core`, `cli`, `android`, `ios` and `filesystem` in `package.json`; its lockfile pins them; the workflow adds only `@capacitor/assets`.
 - `@capacitor/filesystem` stores the bundles; `WebView`, built into Capacitor, switches them; no own Swift or Kotlin.
 
 ## Compatibility key
@@ -65,4 +65,8 @@ Same as [build.md](../build.md#steps), except:
 
 ## Status
 
-Planned; nothing implemented.
+Implemented. Android tested on the hp2 emulator with a local run of the workflow's steps: offline start, update, rollback, 2-try crash fallback, new store build. Not yet:
+
+- iOS: untested, needs a Mac or a `macos-26` run.
+- A GitHub Actions run of the `_ota` workflows.
+- A failed release's folder stays until the next kept release.

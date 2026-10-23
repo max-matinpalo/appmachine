@@ -57,8 +57,8 @@ The request's host, without port, picks the role:
 - Manifest: JSON text `{"files":{"<path>":"<sha256 hex>"}}`; paths relative, `/`-separated, sorted.
 - Signature: base64 of the ECDSA P-256 SHA-256 signature (WebCrypto format, 64 bytes `r‖s`) of the manifest's UTF-8 bytes.
 - Rollout: a device is in when the first 8 hex digits of `sha256(device + id)`, as a number, `% 100 < rollout`.
-- Release for a device: its channel's releases with its key, not `rolledback`, newest first; the first one that is the device's `current`, or `live` with the device in its rollout. None: no update.
-- First visit: the newest `live` release of the channel with key `web` and rollout 100.
+- Release for a device: its channel's releases with its key (key `web`: every key), not `rolledback`, newest first; the first one that is the device's `current`, or `live` with the device in its rollout. None: no update.
+- First visit: the newest `live` release of the channel with rollout 100, any key.
 
 ## App routes
 
@@ -66,9 +66,10 @@ The request's host, without port, picks the role:
 |---|---|
 | `GET /_ota/check?device=&current=&key=` + specs | 200 `{ id, manifest, signature }` of the device's release, or 204; records the device; `Cache-Control: no-store` |
 | `GET /_ota/files/<sha256>[.<ext>]` | The file; type from `ext`; `Cache-Control: public, max-age=31536000, immutable`; 404 if missing |
-| `POST /_ota/report` `{ device, reports: [{ release, state }] }` | 204; unknown releases are ignored |
+| `POST /_ota/report` `{ device, reports: [{ release, state }] }`, as JSON or `text/plain` JSON text | 204; unknown releases are ignored |
 | `GET /*` | The first-visit release's file for the path |
 
+- `/_ota/` responses send `Access-Control-Allow-Origin: *` for the apps (`https://localhost`, `capacitor://localhost`); updaters send reports as `text/plain`, so no preflight.
 - Check specs, all optional: `running` (release ID this launch runs from cache, empty from network), `screen` (`390x844@3`), `standalone` (`0`/`1`), `language`, `cores`, `memory` (GB), `model`, `platform` (client hints). Unknown fields are dropped, so newer apps can send more.
 - `GET /*`: `/` and folders serve their `index.html`; a path not in the manifest whose last segment has no `.` serves `index.html` (SPA); otherwise 404; no release: 404.
 - `GET /*` sends `Cache-Control: public, max-age=60, stale-if-error=86400` and the type from the path's extension.

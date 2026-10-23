@@ -112,7 +112,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 ## Publishing
 
 - `npx appmachine publish [--channel beta] [--rollout <0–100>] [--dir dist]` runs `npm run build --if-present`, then publishes `--dir`.
-- It adds the [updater files](updater.md#files), signs the file list, uploads new files and creates the release with its compatibility key (`web` for now) and git commit (`GITHUB_SHA`, else `git rev-parse HEAD`).
+- It adds the [updater files](updater.md#files), signs the file list, uploads new files and creates the release with its [compatibility key](native.md#compatibility-key) and git commit (`GITHUB_SHA`, else `git rev-parse HEAD`).
 - `--channel` defaults to `production`, `--rollout` to 100.
 - Environment: `OTA_PRIVATE_KEY` (private JWK), `MAXAPP_URL` (default `https://maxapp.dev`), and `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` of the Access service token `maxapp-publish`; the server has no auth code.
 - `npx appmachine keygen` prints a new key pair: `OTA_PRIVATE_KEY` and `APP_PUBLIC_KEY`.
@@ -158,7 +158,7 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 
 PWA and Admin GUI implemented and live on `maxapp.dev`, for TeamFeedback (`tf.maxapp.dev`). Not yet:
 
-- iOS and Android: planned in [native.md](native.md), with own `_ota` build workflows.
+- iOS and Android: [native.md](native.md#status).
 - Backups of the server's data folder.
 - TeamFeedback publishing: its app still registers its own service worker, and its repo has no `web` workflow or OTA secrets yet.
 - A real run of `src/web.yml`.
