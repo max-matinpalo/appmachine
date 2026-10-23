@@ -34,11 +34,12 @@ export const listReleases = () => db.query(`${summary} GROUP BY r.id ORDER BY r.
 export const releaseById = id => db.query(`${summary} WHERE r.id = ? GROUP BY r.id`).get(id);
 export const sha256 = bytes => new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 
+// Key `web` (a PWA, no native part) matches releases of every key.
 export function selectRelease(channel, key, device, current) {
-  const releases = db.query("SELECT * FROM releases WHERE channel = ? AND key = ? AND state != 'rolledback' ORDER BY id DESC").all(channel, key);
+  const releases = db.query("SELECT * FROM releases WHERE channel = ? AND (key = ? OR ? = 'web') AND state != 'rolledback' ORDER BY id DESC").all(channel, key, key);
   return releases.find(r => r.id === current || (r.state === 'live' && parseInt(sha256(device + r.id).slice(0, 8), 16) % 100 < r.rollout));
 }
 
 export function firstRelease(channel) {
-  return db.query("SELECT * FROM releases WHERE channel = ? AND key = 'web' AND state = 'live' AND rollout = 100 ORDER BY id DESC").get(channel);
+  return db.query("SELECT * FROM releases WHERE channel = ? AND state = 'live' AND rollout = 100 ORDER BY id DESC").get(channel);
 }

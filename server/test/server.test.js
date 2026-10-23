@@ -131,6 +131,7 @@ describe('uploads and signed releases', () => {
       const response = await request(`/_ota/files/${value}.js`, { host });
       expect(response.status).toBe(200);
       expect(response.headers.get('cache-control')).toBe(immutable);
+      expect(response.headers.get('access-control-allow-origin')).toBe('*');
       expect(response.headers.get('content-type')).toBe(Bun.file('x.js').type);
       expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
     }
@@ -199,6 +200,7 @@ describe('release selection and controls', () => {
     const response = await check({ current: '999' });
     expect(response.status).toBe(204);
     expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(await response.text()).toBe('');
   });
   test('filters by channel and key and selects newest eligible release', async () => {
@@ -211,6 +213,11 @@ describe('release selection and controls', () => {
     expect((await (await check({}, { host: 'tf-beta.localhost' })).json()).id).toBe(beta);
     expect((await (await check({ key: 'native' })).json()).id).toBe(native);
     expect((await check({ key: 'unknown' })).status).toBe(204);
+    expect((await (await check({ current: String(last) })).json()).id).toBe(last);
+    clear();
+    const onlyNative = await create({}, { key: 'native' });
+    expect((await (await check()).json()).id).toBe(onlyNative);
+    expect((await check({ key: 'other' })).status).toBe(204);
   });
   test('rollout uses the first eight SHA-256 hex digits and is monotonic', async () => {
     clear();
@@ -311,6 +318,13 @@ describe('reports and first visits', () => {
     expect(list[1]).toMatchObject({ downloaded: 0, active: 1, failed: 1 });
     expect((await report('a', [{ release: first, state: 'invalid' }])).status).toBe(400);
     expect((await report('a', [])).status).toBe(204);
+    expect((await report('', [])).status).toBe(400);
+    const text = await request('/_ota/report', { host: 'tf.localhost', method: 'POST', body: new TextEncoder().encode(JSON.stringify({ device: 'c', reports: [{ release: last, state: 'downloaded' }] })), headers: { 'Content-Type': 'text/plain;charset=UTF-8', Origin: 'capacitor://localhost' } });
+    expect(text.status).toBe(204);
+    expect(text.headers.get('access-control-allow-origin')).toBe('*');
+    expect((await json('/api/releases'))[0]).toMatchObject({ downloaded: 1 });
+    const bad = await request('/_ota/report', { host: 'tf.localhost', method: 'POST', body: new TextEncoder().encode('{'), headers: { 'Content-Type': 'text/plain' } });
+    expect(bad.status).toBe(400);
   });
   test('PWA serves files, directories, SPA paths and cache and MIME headers', async () => {
     clear();
@@ -327,7 +341,6 @@ describe('reports and first visits', () => {
     await patch(paused, { state: 'paused' });
     const rolledback = await create({ 'index.html': betaHtml });
     await patch(rolledback, { state: 'rolledback' });
-    await create({ 'index.html': betaHtml }, { key: 'native' });
     for (const path of ['/', '/index.html', '/settings/users', '/new/', '/file%20name']) {
       const response = await request(path, { host: 'tf.localhost' });
       expect(response.status).toBe(200);
@@ -347,6 +360,8 @@ describe('reports and first visits', () => {
     expect((await request('/%zz', { host: 'tf.localhost' })).status).toBe(400);
     await patch(partial, { rollout: 100 });
     expect(await (await request('/', { host: 'tf.localhost' })).text()).toBe('<title>Beta</title>');
+    await create({ 'index.html': html }, { key: 'native' });
+    expect(await (await request('/', { host: 'tf.localhost' })).text()).toBe('<title>Production</title>');
   });
   test('database and files persist across a server restart', async () => {
     const releases = await json('/api/releases');

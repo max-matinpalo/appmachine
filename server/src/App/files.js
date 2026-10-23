@@ -11,5 +11,6 @@ export default async function (req, res) {
   return new Response(file, { headers: {
     'Content-Type': match[2] ? Bun.file(`x.${match[2]}`).type : 'application/octet-stream',
     'Cache-Control': 'public, max-age=31536000, immutable',
+    'Access-Control-Allow-Origin': '*',
   } });
 }

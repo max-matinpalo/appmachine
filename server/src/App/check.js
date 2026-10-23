@@ -6,6 +6,7 @@ import { saveDevice } from '../Utils/devices.js';
 export default async function (req, res) {
   const channel = host(req, 'app');
   res.header('Cache-Control', 'no-store');
+  res.header('Access-Control-Allow-Origin', '*');
 
   // 1. Select the device's release.
   const { device, current, key } = req.query;
