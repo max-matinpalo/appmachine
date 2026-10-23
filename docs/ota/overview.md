@@ -24,19 +24,13 @@ Main spec for AppMachine's own over-the-air web updates of Capacitor iOS and And
 
 ## Store review
 
-Hard requirement: comply with every written store rule. Apple decides, so approval can't be guaranteed.
+Every store build must pass review; Apple decides, so approval can't be guaranteed.
 
-| Rule | Requirement |
-|---|---|
-| Apple license agreement 3.3.1(B) | OTA ships only JS, HTML, CSS and assets run by WebKit; it keeps the app's purpose and never bypasses signing or sandbox |
-| Guideline 2.5.2 | OTA never introduces or changes features; new features go through a store build |
-| Guidelines 2.3.1, 2.5.19 | Every feature is in the reviewed build and in review notes; no hidden or dormant features switched on later |
-| Guideline 4.2 | The bundled version is a complete, app-like app on its own, not a website wrapper |
-| Guideline 2.5.2 (container) | The updater only uses Capacitor's public `WebView` calls and files inside the app container |
-| Google Play Device and Network Abuse | JS updates in a WebView are allowed; native code updates are not |
-
-- OTA may ship: bug fixes, content, text, styling and small changes within reviewed features.
-- Store build needed: native code or plugins, permissions, new features, anything review requires.
+- Each store build ships the complete current app, not a website wrapper (Apple 4.2).
+- OTA ships only JS, HTML, CSS and assets run in the WebView (Apple license 3.3.1(B), Google Play Device and Network Abuse).
+- OTA may change anything within the app's reviewed purpose: fixes, UI, new screens, small features.
+- Store build needed: native code or plugins, permissions, purpose change, payments, age-rating content.
+- Nothing is hidden during review (Apple 2.3.1, 2.5.19).
 
 ## Capacitor base
 
