@@ -57,6 +57,8 @@ Same as [build.md](../build.md#steps), except:
 - A crash before ready reopens the last kept path, so the next launch counts the failed try.
 - Bundle writes `APPMACHINE.bundled`, the build's own release ID; a state from another build is reset (device ID kept), since Capacitor drops the kept path on a new store build.
 - Rollback to a release without a folder downloads it again.
+- `state.json` is written after its backup `state.json.bak`; an interrupted write leaves one complete copy.
+- A release ID must be a positive integer: it names folders.
 
 ## Server
 

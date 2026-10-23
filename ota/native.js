@@ -16,6 +16,9 @@
   const fileURL = (server, path, hash) => `${server}/_ota/files/${hash}${path.match(/\.[^/.]+$/)?.[0] || ''}`;
   const read = async path => JSON.parse((await fs('readFile', { path, encoding: 'utf8' })).data);
   const write = (path, value) => fs('writeFile', { path, data: JSON.stringify(value), encoding: 'utf8', recursive: true });
+  // State goes to a backup first: an interrupted write leaves one complete copy.
+  const readState = () => read(stateFile).catch(() => read(`${stateFile}.bak`));
+  const writeState = async state => { await write(`${stateFile}.bak`, state); await write(stateFile, state); };
   const names = async (path, directory) => ((await fs('readdir', { path, directory }).catch(() => ({ files: [] }))).files).map(f => f.name ?? f);
   const hex = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
   const base64 = bytes => {
@@ -36,12 +39,12 @@
 
   const started = (async () => {
     // 1. A store build's bundled files carry its config; a new build starts a fresh state.
-    let state = await read(stateFile).catch(() => null);
+    let state = await readState().catch(() => null);
     if (APPMACHINE.bundled && state?.build !== APPMACHINE.bundled) {
       await clean(null);
       const { server, key, bundled } = APPMACHINE;
       state = { device: state?.device || crypto.randomUUID(), build: bundled, server, key, kept: null, trial: null, tries: 0, bad: [], reports: [] };
-      await write(stateFile, state);
+      await writeState(state);
     }
     if (!state) throw Error('No updater state');
 
@@ -58,7 +61,7 @@
         state.trial = null;
         state.tries = 0;
       }
-      await write(stateFile, state);
+      await writeState(state);
       if (state.trial) {
         const { uri } = await fs('getUri', { path: folder(state.trial), directory: area.directory });
         await call('WebView', 'setServerBasePath', { path: decodeURIComponent(uri.replace(/^file:\/\//, '')) });
@@ -100,20 +103,20 @@
     state.trial = release.id;
     state.tries = 0;
     state.reports.push({ release: release.id, state: 'downloaded' });
-    await write(stateFile, state);
+    await writeState(state);
   }
 
   async function update() {
     // 1. Keep a trial that reached ready: Capacitor reopens it on later launches.
     const running = await started;
-    const state = await read(stateFile);
+    const state = await readState();
     if (!failed && state.trial && running === state.trial) {
       await call('WebView', 'persistServerBasePath');
       state.kept = state.trial;
       state.trial = null;
       state.tries = 0;
       state.reports.push({ release: state.kept, state: 'active' });
-      await write(stateFile, state);
+      await writeState(state);
       await clean(state.kept);
     }
 
@@ -123,7 +126,7 @@
       const response = await fetch(`${state.server}/_ota/report`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ device: state.device, reports: state.reports }) });
       if (!response.ok) throw Error('Report failed');
       state.reports.splice(0, sent);
-      await write(stateFile, state);
+      await writeState(state);
     }
 
     // 3. Check for a release or a rollback, then stage it for the next launch.
@@ -137,12 +140,13 @@
     if (response.status === 204) return;
     if (!response.ok) throw Error('Check failed');
     const release = await response.json();
+    if (!Number.isSafeInteger(release.id) || release.id < 1) throw Error('Invalid release ID'); // the ID names folders
     if (release.id === state.trial || state.bad.includes(release.id)) return;
     if (release.id === kept) {
       if (!state.trial) return;
       state.trial = null;
       state.tries = 0;
-      await write(stateFile, state);
+      await writeState(state);
       return;
     }
     await download(state, release);
