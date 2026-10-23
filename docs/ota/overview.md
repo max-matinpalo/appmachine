@@ -82,10 +82,22 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Server down: update checks fail and the app keeps its current bundle.
 - Back up the server's data folder: bundles and release database.
 
+## Domains
+
+| Host | Serves | Access |
+|---|---|---|
+| `maxapp.dev` | Admin GUI | Private, Cloudflare Access |
+| `<app>.maxapp.dev`, e.g. `tf.maxapp.dev` | The app's PWA (production), update checks, bundle files | Public |
+| `<app>-beta.maxapp.dev` | The app's beta PWA | Public |
+
+- Each app has its own origin, so PWA storage and service workers stay separate.
+- Beta uses `-beta`, not `beta.<app>`: Cloudflare's free certificate covers only one subdomain level.
+- A wildcard `*.maxapp.dev` goes through the tunnel; a new app needs no DNS change.
+
 ## Controls
 
 - Each app has its own ID, signing key and channels `production` and `beta`.
-- Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain (`beta.` prefix).
+- Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain, see [Domains](#domains).
 - A device gets the newest active release of its channel with its compatibility key.
 - Rollout: a percentage per release; a device is in when `hash(deviceId + releaseId) % 100 < rollout`, so raising it only adds devices.
 - Pause: devices without the release stop getting it; devices with it keep it.
