@@ -84,7 +84,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## PWA
 
-The same web app in the browser, optionally installed with its own window and icon; no Capacitor. For now also the desktop app.
+The same web app in the browser, optionally installed with its own window and icon; no Capacitor or Tauri. Stays alongside the store and desktop apps, with the same offline support and OTA updates.
 
 1. First visit: our server serves the current production release.
 2. The service worker saves its files in Cache Storage; later launches work offline.
@@ -99,7 +99,9 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 | Serves the active bundle | Capacitor `WebView` base path | Service worker | Small own Tauri part |
 | Compatibility key | Native build hash | `web` | Native build hash |
 
-- One publish updates web, PWA, iOS and Android.
+- One publish updates web, PWA, iOS, Android and desktop.
+- PWA first visit needs internet; the store and desktop apps start offline with their bundled version.
+- The PWA asks `navigator.storage.persist()`; Safari deletes data of sites not installed after 7 days without use.
 - The iOS app can't use a service worker: WebKit allows them only on https sites, and bundled files load from `capacitor://localhost`.
 
 ## Status
