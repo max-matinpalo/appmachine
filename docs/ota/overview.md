@@ -18,6 +18,7 @@ Main spec for AppMachine's own over-the-air web updates of Capacitor iOS and And
 - Minimal: as few lines as possible; Swift and Kotlin code as small as possible, ideally none.
 - Own updater, mostly JS; the Capgo and Capawesome updater plugins are references only, not used.
 - Apps run from bundled local files, not from `APP_SERVER_URL`.
+- Offline data and features use web APIs (IndexedDB, Cache Storage), the same on all platforms.
 - One mechanism: iOS, Android and PWA share bundles, server API, channels and updater JS; see [PWA](#pwa).
 - Server: Node.js (MaxServer).
 - Our server serves the bundles and the web app; Cloudflare's CDN cache absorbs download load; no object storage.
@@ -99,6 +100,7 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 | Compatibility key | Native build hash | `web` |
 
 - One publish updates web, PWA, iOS and Android.
+- The iOS app can't use a service worker: WebKit allows them only on https sites, and bundled files load from `capacitor://localhost`.
 
 ## Status
 
