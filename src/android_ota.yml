@@ -1,0 +1,122 @@
+name: AppMachine / Android OTA
+on:
+  push:
+    tags: [androiddev-ota, android-ota]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    environment: ${{ github.ref == 'refs/tags/androiddev-ota' && 'Development' || 'Production' }}
+    env:
+      CHANNEL: ${{ github.ref == 'refs/tags/androiddev-ota' && 'beta' || 'production' }}
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+      APP_VERSION: ${{ vars.APP_VERSION }}
+      MAXAPP_URL: ${{ vars.MAXAPP_URL }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
+      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with: { node-version: lts/* }
+
+    - uses: actions/setup-java@v4
+      with: { distribution: temurin, java-version: "21" }
+
+    - uses: android-actions/setup-android@v3
+      with: { packages: platform-tools }
+
+    - name: 🔎 Preflight Checks
+      run: |
+        set -euo pipefail
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID
+        req ANDROID_KEYSTORE_BASE64; req ANDROID_KEYSTORE_PASSWORD
+        req OTA_PRIVATE_KEY; req CF_ACCESS_CLIENT_ID; req CF_ACCESS_CLIENT_SECRET
+
+    - name: 📦 Install Dependencies
+      run: |
+        set -euo pipefail
+        npm ci
+        for p in core cli android filesystem; do
+          [ -f "node_modules/@capacitor/$p/package.json" ] || { echo "❌ Add @capacitor/$p to package.json" >&2; exit 1; }
+        done
+        npm i -D @capacitor/assets --no-save --no-package-lock --no-fund --no-audit
+
+    - name: 🌐 Bundle Web App
+      run: |
+        set -euo pipefail
+        npx appmachine bundle --channel "$CHANNEL" --out www
+        rm -f capacitor.config.*
+        node -e '
+          const fs = require("fs");
+          const cfg = { appId: process.env.APP_ID, appName: process.env.APP_NAME || "App", webDir: "www" };
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
+        '
+
+    - name: 📱 Capacitor Sync & Assets
+      run: |
+        set -euo pipefail
+        rm -rf android && npx --no-install cap add android
+        mkdir -p assets
+        ICON="appmachine/icon.png"
+        if [[ "${{ github.ref }}" == "refs/tags/androiddev-ota" && -f "appmachine/icon.dev.png" ]]; then ICON="appmachine/icon.dev.png"; fi
+        if [ -f "$ICON" ]; then
+          for f in logo logo-dark splash splash-dark; do cp "$ICON" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --android --assetPath assets
+        else
+          echo "⚠️ No icon found at $ICON - skipping asset generation"
+        fi
+        npx --no-install cap sync android
+
+    - name: 🔐 Configure Signing
+      run: |
+        set -euo pipefail
+        printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > android/keystore.jks
+        cat > android/app/signing.gradle <<EOF
+        android {
+            signingConfigs {
+                release {
+                    storeFile file("../keystore.jks")
+                    storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                    keyAlias "release"
+                    keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                }
+            }
+            buildTypes { release { signingConfig signingConfigs.release } }
+        }
+        EOF
+        echo 'apply from: "signing.gradle"' >> android/app/build.gradle
+
+    - name: 🔧 Update Version
+      run: |
+        node -e '
+          const fs = require("fs"), p = "android/app/build.gradle";
+          let s = fs.readFileSync(p, "utf8").replace(/versionCode\s+\d+/, `versionCode ${process.env.GITHUB_RUN_NUMBER}`);
+          if (process.env.APP_VERSION) s = s.replace(/versionName\s+"[^"]+"/, `versionName "${process.env.APP_VERSION}"`);
+          fs.writeFileSync(p, s);
+        '
+
+    - name: 🏗️ Gradle Build
+      run: |
+        set -euo pipefail
+        chmod +x android/gradlew
+        (cd android && ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease)
+        mkdir -p dist-android
+        find android/app/build/outputs \( -name "*.apk" -o -name "*.aab" \) -exec cp {} dist-android/ \;
+        ls -l dist-android/
+
+    - name: 📤 Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-release
+        path: dist-android/*

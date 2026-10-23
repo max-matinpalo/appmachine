@@ -1,0 +1,198 @@
+name: AppMachine / iOS OTA
+on:
+  push:
+    tags: [iosdev-ota, ios-ota]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 15
+    environment: ${{ github.ref == 'refs/tags/iosdev-ota' && 'Development' || 'Production' }}
+    env:
+      CHANNEL: ${{ github.ref == 'refs/tags/iosdev-ota' && 'beta' || 'production' }}
+      MAXAPP_URL: ${{ vars.MAXAPP_URL }}
+      OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
+      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      APP_SERVER_URL: ${{ vars.APP_SERVER_URL }}
+      APP_ID: ${{ vars.APP_ID }}
+      APP_NAME: ${{ vars.APP_NAME }}
+      APP_VERSION: ${{ vars.APP_VERSION }}
+      IOS_CERT_BASE64: ${{ secrets.IOS_CERT_BASE64 }}
+      IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+      IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 🕵️ Preflight
+      run: |
+        set -euo pipefail
+        req() { [ -n "${!1:-}" ] || { echo "❌ Missing: $1" >&2; exit 1; }; }
+        req APP_SERVER_URL; req APP_ID; req APP_NAME
+        req IOS_TEAM_ID
+        req IOS_CERT_BASE64; req IOS_CERT_PASSWORD
+        req IOS_PROFILE_BASE64
+        req OTA_PRIVATE_KEY; req CF_ACCESS_CLIENT_ID; req CF_ACCESS_CLIENT_SECRET
+
+    - uses: actions/setup-node@v4
+      with: { node-version: lts/* }
+
+    - name: 🚀 Install & Generate
+      run: |
+        set -euo pipefail
+        
+        # 1. Install: Capacitor comes from the project's lockfile
+        npm ci
+        for p in core cli ios filesystem; do
+          [ -f "node_modules/@capacitor/$p/package.json" ] || { echo "❌ Add @capacitor/$p to package.json" >&2; exit 1; }
+        done
+        npm i -D @capacitor/assets --no-save --no-package-lock --no-fund --no-audit
+
+        # 2. Bundle the web app with the updater; the app starts from www/
+        npx appmachine bundle --channel "$CHANNEL" --out www
+        rm -f capacitor.config.*
+        node -e '
+          const fs = require("fs");
+          const cfg = { appId: process.env.APP_ID, appName: process.env.APP_NAME, webDir: "www" };
+          fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2));
+        '
+
+        # 3. Generate (keep ios/ so Package.resolved stays stable)
+        if [ -d ios/App ]; then
+          echo "✅ iOS project exists (keeping ios/ + Package.resolved)"
+        else
+          npx --no-install cap add ios
+        fi
+
+        # 4. Assets (Smart Icon Selection)
+        mkdir -p assets
+        ICON="appmachine/icon.png"
+
+        # Logic: If tag is "iosdev-ota" AND "icon.dev.png" exists, use it.
+        if [[ "${{ github.ref }}" == "refs/tags/iosdev-ota" && -f "appmachine/icon.dev.png" ]]; then
+          echo "🎨 Dev Build detected: Using icon.dev.png"
+          ICON="appmachine/icon.dev.png"
+        fi
+
+        if [ -f "$ICON" ]; then
+          echo "✅ Generating assets from: $ICON"
+          for f in logo logo-dark splash splash-dark; do cp "$ICON" "assets/$f.png"; done
+          npx --no-install capacitor-assets generate --ios --assetPath assets
+        else
+          echo "⚠️ No icon found at $ICON - skipping asset generation"
+        fi
+
+        npx --no-install cap sync ios
+
+        echo "📂 swiftpm lock (if present):"
+        ls -la ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm || true
+
+    - name: 🔐 Configure Signing
+      run: |
+        set -euo pipefail
+
+        # 1. Decode Cert (Safer printf)
+        printf "%s" "$IOS_CERT_BASE64" | base64 -D > cert.p12
+        
+        # 2. Setup Keychain with Memory-Only Password
+        KC_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+        KC_PW="$(uuidgen)"
+
+        security create-keychain -p "$KC_PW" "$KC_PATH"
+        security set-keychain-settings -lut 21600 "$KC_PATH"
+        security unlock-keychain -p "$KC_PW" "$KC_PATH"
+        security list-keychains -d user -s "$KC_PATH" login.keychain-db
+        security default-keychain -d user -s "$KC_PATH"
+
+        security import cert.p12 -k "$KC_PATH" -P "$IOS_CERT_PASSWORD" -A
+        
+        # FIX: Added codesign: to partition list
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PW" "$KC_PATH"
+        
+        security find-identity -v -p codesigning "$KC_PATH" || true
+
+        # 3. Profile (Safer printf)
+        printf "%s" "$IOS_PROFILE_BASE64" | base64 -D > profile.mobileprovision
+        security cms -D -i profile.mobileprovision > profile.plist
+        UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" profile.plist)
+        NAME=$(/usr/libexec/PlistBuddy -c "Print Name" profile.plist)
+        echo "✅ Profile: $NAME ($UUID)"
+
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/"$UUID".mobileprovision
+
+        # 4. Generate Export Options (Scoped to ios/App)
+        cat > ios/App/exportOptions.plist <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${IOS_TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+                <key>${APP_ID}</key><string>${NAME}</string>
+            </dict>
+        </dict>
+        </plist>
+        EOF
+        
+        echo "PROFILE_NAME=$NAME" >> $GITHUB_ENV
+
+    - name: 📦 Build & Archive
+      run: |
+        set -euo pipefail
+
+        echo "📂 ios/App contents:"
+        ls -la ios/App
+
+        # 1. Update Marketing Version (Only if APP_VERSION exists)
+        if [ -n "${APP_VERSION:-}" ]; then
+          echo "🚀 Updating Marketing Version to: $APP_VERSION"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" ios/App/App/Info.plist \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_VERSION" ios/App/App/Info.plist
+        else
+          echo "ℹ️  APP_VERSION not set; keeping existing ShortVersionString"
+        fi
+
+        # 2. Update Build Number
+        BUILD_NUM="${{ github.run_number }}"
+        echo "🔢 Updating CFBundleVersion to: $BUILD_NUM"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" ios/App/App/Info.plist \
+          || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" ios/App/App/Info.plist
+
+        # 3. Set Non-Exempt Encryption to NO
+        echo "🚫 Setting ITSAppUsesNonExemptEncryption = NO"
+        /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist \
+          || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist
+
+        echo "🔧 Resolve SwiftPM deps (use Package.resolved)"
+        xcodebuild -resolvePackageDependencies \
+          -project ios/App/App.xcodeproj \
+          -scheme App
+
+        xcodebuild -project ios/App/App.xcodeproj -scheme App \
+          -archivePath ios/App/App.xcarchive archive \
+          -configuration Release \
+          -destination "generic/platform=iOS" \
+          CODE_SIGN_IDENTITY="Apple Distribution" \
+          CODE_SIGN_STYLE=Manual \
+          DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+          PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+
+        xcodebuild -exportArchive -archivePath ios/App/App.xcarchive \
+          -exportOptionsPlist ios/App/exportOptions.plist \
+          -exportPath output
+
+    - name: 📤 Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-build
+        path: output/*.ipa
+        if-no-files-found: error
