@@ -1,0 +1,17 @@
+{
+	"name": "server",
+	"version": "0.1.0",
+	"description": "",
+	"main": "setup.js",
+	"scripts": {
+		"dev": "maxserver dev",
+		"build": "maxserver build",
+		"start": "bun dist/bundle.js",
+		"test": "bun test"
+	},
+	"type": "module",
+	"private": true,
+	"dependencies": {
+		"maxserver": "2.2.0"
+	}
+}

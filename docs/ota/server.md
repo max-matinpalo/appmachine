@@ -77,7 +77,7 @@ The request's host, without port, picks the role:
 | `GET /api/app` | `{ id, name }` |
 | `GET /api/releases` | All releases, newest first: `{ id, channel, key, commit, created, rollout, state, downloaded, active, failed }`; counts from `reports` |
 | `POST /api/files/missing` `{ hashes }` | `{ missing }`: the hashes not stored |
-| `PUT /api/files/<sha256>`, raw body | 204; 400 if the body's hash differs |
+| `PUT /api/files/<sha256>`, raw body (`application/octet-stream`) | 204; 400 if the body's hash differs |
 | `POST /api/releases` `{ channel, key, manifest, signature, commit, rollout? }` | 201 `{ id }`; 400 if the signature fails with `APP_PUBLIC_KEY` or a file is missing; `rollout` defaults to 100, `state` is `live` |
 | `PATCH /api/releases/<id>` `{ rollout?, state? }` | The updated release, shaped as in the list |
 | `GET /*` | Admin GUI from `server/gui/dist/`; unknown paths serve `index.html` |
@@ -87,4 +87,4 @@ The request's host, without port, picks the role:
 
 ## Status
 
-Not implemented.
+Implemented.

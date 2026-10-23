@@ -1,0 +1,12 @@
+export const text = example => ({ type: 'string', minLength: 1, example });
+export const hash = { type: 'string', pattern: '^[a-f0-9]{64}$', example: 'a'.repeat(64) };
+export const id = { type: 'integer', minimum: 1, example: 1 };
+export const rollout = { allOf: [{ not: { enum: [null, true, false] } }, { type: 'integer', minimum: 0, maximum: 100 }], example: 100 };
+export const channel = { type: 'string', enum: ['production', 'beta'], example: 'production' };
+export const state = { type: 'string', enum: ['live', 'paused', 'rolledback'], example: 'live' };
+export const reportState = { type: 'string', enum: ['downloaded', 'active', 'failed'], example: 'active' };
+export const object = (properties, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: false });
+export const array = items => ({ type: 'array', items });
+const error = object({ statusCode: { type: 'integer', example: 400 }, error: text('Bad Request'), message: text('Invalid request') });
+export const responses = extra => ({ 400: error, 403: error, 404: error, ...extra });
+export const meta = (summary, tag) => ({ summary, description: summary, tags: [tag] });
