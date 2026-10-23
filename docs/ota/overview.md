@@ -88,7 +88,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 | Host | Serves | Access |
 |---|---|---|
-| `maxapp.dev` | Admin GUI, publish API | Private: Access app `MaxApp`, policies `max` and `agents` |
+| `maxapp.dev` | Admin GUI, publish API | Private: Access app `MaxApp`, policies `max`, `agents` and `maxapp-publish` |
 | `<app>.maxapp.dev`, e.g. `tf.maxapp.dev` | The app's PWA (production), update checks, bundle files | Public |
 | `<app>-beta.maxapp.dev` | The app's beta PWA | Public |
 
@@ -114,7 +114,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - `npx appmachine publish [--channel beta] [--rollout <0–100>] [--dir dist]` runs `npm run build --if-present`, then publishes `--dir`.
 - It adds the [updater files](updater.md#files), signs the file list, uploads new files and creates the release with its compatibility key (`web` for now) and git commit (`GITHUB_SHA`, else `git rev-parse HEAD`).
 - `--channel` defaults to `production`, `--rollout` to 100.
-- Environment: `OTA_PRIVATE_KEY` (private JWK), `MAXAPP_URL` (default `https://maxapp.dev`), and `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` of its own Access service token; the server has no auth code.
+- Environment: `OTA_PRIVATE_KEY` (private JWK), `MAXAPP_URL` (default `https://maxapp.dev`), and `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` of the Access service token `maxapp-publish`; the server has no auth code.
 - `npx appmachine keygen` prints a new key pair: `OTA_PRIVATE_KEY` and `APP_PUBLIC_KEY`.
 - Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions: `src/web.yml`.
 - Each store build also publishes its bundled version as a release.
@@ -155,9 +155,9 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 
 ## Status
 
-PWA and Admin GUI implemented and live on `maxapp.dev`, with the test app `demo`. Not yet:
+PWA and Admin GUI implemented and live on `maxapp.dev`, for TeamFeedback (`tf.maxapp.dev`). Not yet:
 
 - iOS and Android; their build workflows still load the app from `APP_SERVER_URL`.
 - Backups of the server's data folder.
-- Publish's own Access service token; the agents' token works meanwhile.
+- TeamFeedback publishing: its app still registers its own service worker, and its repo has no `web` workflow or OTA secrets yet.
 - A real run of `src/web.yml`.

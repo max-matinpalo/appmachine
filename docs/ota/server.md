@@ -95,7 +95,8 @@ The request's host, without port, picks the role:
 - Cloudflare Tunnel `maxapp-hp83`, service `cloudflared`: `maxapp.dev` and `*.maxapp.dev` to `127.0.0.1:3700`.
 - Machine setup, once: `server/deploy/setup.sh` as root with `MAXAPP_TUNNEL_TOKEN` (MaxAgents secret).
 - Deploy: `server/deploy/deploy.sh` in the main copy; config in `server/deploy/app.env`.
-- The `demo` app's private key: MaxAgents secret `OTA_PRIVATE_KEY`.
+- The app is TeamFeedback (`tf`); its private key: MaxAgents secret `TF_OTA_PRIVATE_KEY`.
+- Publish's Access service token `maxapp-publish` (policy `maxapp-publish` on `MaxApp`): MaxAgents secrets `MAXAPP_PUBLISH_CLIENT_ID` and `MAXAPP_PUBLISH_CLIENT_SECRET`.
 - Moving to another machine: copy `/var/lib/maxapp`, run both scripts there, stop the services here.
 
 ## Status
