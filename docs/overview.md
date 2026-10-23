@@ -27,6 +27,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 | OTA updates | — | [ota/overview.md](ota/overview.md) |
 | OTA server and Admin GUI | `server/` | [ota/server.md](ota/server.md) |
 | Updater and publish | `ota/`, `bin/appmachine.js`, `src/web.yml` | [ota/updater.md](ota/updater.md) |
+| Errors and crashes (planned) | `ota/`, `server/` | [ota/errors.md](ota/errors.md) |
 | Known problems | — | [bugs.md](bugs.md) |
 
 ## Native features

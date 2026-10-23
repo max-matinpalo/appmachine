@@ -119,6 +119,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions: `src/web.yml`.
 - Each store build also publishes its bundled version as a release.
 - Controls and status: [Admin GUI](#admin-gui).
+- Errors and crashes: [errors.md](errors.md) (planned).
 
 ## Admin GUI
 
