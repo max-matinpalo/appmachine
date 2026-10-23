@@ -12,6 +12,6 @@
 	"type": "module",
 	"private": true,
 	"dependencies": {
-		"maxserver": "2.2.0"
+		"maxserver": "^2.2.0"
 	}
 }

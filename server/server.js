@@ -3,7 +3,7 @@ import maxserver from 'maxserver';
 const server = await maxserver({
   port: Number(process.env.PORT || 3700),
   secret: crypto.randomUUID(),
-  docs: false,
+  docs: process.env.NODE_ENV !== 'production',
   cors: '',
   public: false,
   static: false,

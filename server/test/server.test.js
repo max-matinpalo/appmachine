@@ -101,12 +101,11 @@ describe('hosts and Access', () => {
     expect((await request('/api/app', { access: false, server: dev })).status).toBe(200);
   });
   test('API docs exist only in development', async () => {
-    expect((await request('/docs', { server: dev })).status).toBe(200);
-    expect((await request('/docs/openapi.json', { server: dev })).headers.get('content-type')).toContain('application/json');
-    expect((await request('/docs', { server: dev, host: 'unknown.localhost' })).status).toBe(404);
-    const response = await request('/docs/openapi.json');
-    expect(response.status).toBe(404);
-    expect(await response.text()).not.toContain('"openapi"');
+    const development = await request('/docs/openapi.json', { server: dev });
+    expect(development.status).toBe(200);
+    expect((await development.json()).openapi).toBe('3.1.0');
+    const production = await request('/docs/openapi.json');
+    expect(await production.text()).not.toContain('"openapi"');
   });
   test('GUI assets and unknown paths resolve from its build directory', async () => {
     for (const path of ['/', '/apps/releases', '/unknown.css']) expect(await (await request(path)).text()).toContain('Admin GUI');

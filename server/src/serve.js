@@ -2,8 +2,6 @@
 import { resolve, extname } from 'node:path';
 import { host } from './Utils/host.js';
 import { files, firstRelease } from './Utils/db.js';
-import { config } from './Utils/config.js';
-import { serveDocs } from './Utils/docs.js';
 
 const gui = resolve('gui/dist');
 
@@ -16,10 +14,6 @@ export default async function (req, res) {
   catch { throw createError(400, 'Invalid path'); }
   if (path.includes('\0')) throw createError(400, 'Invalid path');
   if (/^\/(api|_ota)(\/|$)/.test(path)) throw createError(404, 'Unknown route');
-  if (/^\/docs(\/|$)/.test(path) && role === 'admin') {
-    if (config.production) throw createError(404, 'Unknown route');
-    return serveDocs(path);
-  }
 
   // 2. Serve the GUI or the channel's fully rolled out web release.
   let file;
