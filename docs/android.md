@@ -1,37 +1,45 @@
-# AppMachine Android Build Workflow
+# Android Build
 
-Build pipeline that turns your webapp into a **signed Android app**.
+Workflows `src/android.yml` and `src/android_keygen.yml` that turn the web app into a signed Android app.
 
+## Usage
 
-## How it works
-1. Start a build by pushing tag `android` or `androiddev` on the branch you want to build.
-2. After workflow completes with success, download the app from workflow artifacts.
-3. Install the `.apk` to your Android phone or deploy the `.aab` to Google Play.
+1. Set up signing once: [Keystore](#keystore).
+2. Push tag `androiddev` or `android` on the branch to build: [build.md](build.md#triggers).
+3. Download the `android-release` artifact from the workflow run.
+4. Install the `.apk` on a phone for testing, or upload the `.aab` to Google Play.
 
-The development and production builds only differ in used variables and secrets.
-Tag `androiddev` - use the variables of environment `Development`.
-Tag `android` - use variables of environment `Production`.
-
-The workflow will output the app in two formats: `.apk` and `.aab`
-The `.apk` format is for direct install/testing on devices.
-The `.aab` format is for upload to Google Play.
-
-
-
-## Setup
-1. Run ONCE the generate keystore workflow.
-   Only ONCE, because the keystore must stay equal when you deploy updates to your app.
-2. Store the keystore workflow result somewhere safe and add it as GitHub Environment
-   secrets: `ANDROID_KEYSTORE` (Base64) and `ANDROID_KEYSTORE_PASSWORD`.
-
----
-
-## Required configuration (GitHub repo)
+## Config
 
 | Type | Name | Description | Example |
 |---|---|---|---|
-| Variable | `APP_SERVER_URL` | Base URL where the app loads from | `https://app.example.com` |
-| Variable | `APP_ID` | Android App ID (package name) | `com.company.app` |
-| Variable | `APP_NAME` | Visible app name | `TeamFeedback` |
-| Secret | `ANDROID_KEYSTORE` | Base64 keystore from the keystore workflow | `BASE64...` |
-| Secret | `ANDROID_KEYSTORE_PASSWORD` | Keystore password used to sign the app | `password123` |
+| Variable | `APP_SERVER_URL` | URL the app loads | `https://app.example.com` |
+| Variable | `APP_ID` | Android package name | `com.company.app` |
+| Variable | `APP_NAME` | Visible app name, default `App` | `TeamFeedback` |
+| Variable | `APP_VERSION` | Optional marketing version | `1.2.0` |
+| Secret | `ANDROID_KEYSTORE_BASE64` | Base64 keystore from the keystore workflow | `BASE64...` |
+| Secret | `ANDROID_KEYSTORE_PASSWORD` | Keystore and key password | `password123` |
+
+## Keystore
+
+Workflow **Generate Android Keystore**, run by hand once per environment.
+
+- The keystore must never change: Google Play only accepts updates signed with the same key.
+- Inputs: `target` (`dev` → `Development`, `prod` → `Production`) and `cn` (certificate Common Name).
+
+1. Set `ANDROID_KEYSTORE_PASSWORD` in the environment first.
+2. Run the workflow; it refuses when the password is missing or `ANDROID_KEYSTORE_BASE64` is already set.
+3. It makes an RSA 2048 key, alias `release`, valid 10,000 days, and deletes the raw `.jks`.
+4. Download the artifact `android-keystore-<target>` (expires in 24 h).
+5. Save its Base64 as `ANDROID_KEYSTORE_BASE64` and keep a backup somewhere safe.
+
+## Pipeline
+
+- Runs on `ubuntu-22.04` with Java 21 and the Android SDK.
+- Deletes and recreates `android/` on every build.
+- Writes the keystore to `android/keystore.jks` and applies a generated `signing.gradle` release config.
+- Gradle builds `bundleRelease` (`.aab`) and `assembleRelease` (`.apk`).
+
+## Status
+
+Implemented.

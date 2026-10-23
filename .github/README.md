@@ -26,9 +26,8 @@ Inside your normal React project:
 
 ```bash
 npm install appmachine
-npx appmachine
 ```
- Configure build variabels and secrets on github
+Configure build variables and secrets on GitHub.
 
 ## Example usage
 1. git tag android; git push origin android
@@ -46,14 +45,14 @@ only when native features change.
 | Type | Name | Description | Example |
 |---|---|---|---|
 | Variable | `APP_SERVER_URL` | Base URL where the app loads from | `https://app.example.com` |
-| Variable | `APP_ID` | iOS Bundle ID (App ID) | `com.company.app` |
+| Variable | `APP_ID` | iOS Bundle ID / Android package name | `com.company.app` |
 | Variable | `APP_NAME` | Visible app name | `ExampleApp` |
 
 
 ## Android Configs
 | Type | Name | Description | Example |
 |---|---|---|---|
-| Secret | `ANDROID_KEYSTORE` | Base64 keystore from the keystore workflow | `BASE64...` |
+| Secret | `ANDROID_KEYSTORE_BASE64` | Base64 keystore from the keystore workflow | `BASE64...` |
 | Secret | `ANDROID_KEYSTORE_PASSWORD` | Keystore password used to sign the app | `password123` |
 
 ## iOS Configs
