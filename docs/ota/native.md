@@ -40,17 +40,17 @@ Same as [build.md](../build.md#steps), except:
 
 ## Updater
 
-`ota/client.js` gets a native branch when `Capacitor.isNativePlatform()`; check, verify, trial, reports and state stay shared with the [PWA](updater.md).
+`ota/native.js` runs when `Capacitor.isNativePlatform()`; `ota/client.js` (the [PWA](updater.md)) then stays off. Bundle writes both into `appmachine.js` with `APPMACHINE` (server, key, public key, bundled release). Both share the check, signature and hash checks, trial rules and reports.
 
 | | PWA | Native |
 |---|---|---|
 | Files | Cache Storage | One folder per release, full tree |
-| State | Cache `appmachine` | `state.json` via Filesystem |
+| State | Cache `appmachine` | `Data/appmachine/state.json` via Filesystem |
 | Starts a trial | Service worker | `setServerBasePath(<release folder>)` at launch |
 | Keeps it | State only | `persistServerBasePath()` on ready |
 | Server URLs | Same origin | `APPMACHINE.server` (`APP_SERVER_URL`) |
 
-- Folders: Android `Data/appmachine/<id>/`; iOS `Library/NoCloud/ionic_built_snapshots/<id>/`, where Capacitor looks for kept paths.
+- Folders: Android `Data/appmachine/releases/<id>/`; iOS `Library/NoCloud/ionic_built_snapshots/<id>/`, where Capacitor reopens kept paths. Manifests: `Data/appmachine/manifests/<id>.json`.
 - Download: unchanged files are copied from the kept release's folder, the rest fetched and hash-checked, then written.
 - Launch: a `trial` that isn't running gets `tries + 1` and starts; over 2 tries: `failed`, added to `bad`.
 - Ready (2 s after `load`, no uncaught error) in a trial: keep it, report `active`, delete other release folders.
@@ -62,12 +62,13 @@ Same as [build.md](../build.md#steps), except:
 
 ## Server
 
-- `/_ota/` routes answer CORS (`Access-Control-Allow-Origin: *`, preflight for `POST /_ota/report`): the app's origin is `https://localhost` (Android) or `capacitor://localhost` (iOS).
+- `/_ota/` routes send `Access-Control-Allow-Origin: *`: the app's origin is `https://localhost` (Android) or `capacitor://localhost` (iOS).
+- Reports go as `text/plain`, a simple request without preflight; the server has no `OPTIONS` routes.
 - Checks and first visits with key `web` match releases of every key; other keys match exactly.
 
 ## Status
 
-Implemented. Android tested on the hp2 emulator with a local run of the workflow's steps: offline start, update, rollback, 2-try crash fallback, new store build. Not yet:
+Implemented. Android tested on the hp2 emulator with a local run of the workflow's steps: offline start, update, rollback, 2-try crash fallback, new store build. State backup and release ID check: mock tests only. Not yet:
 
 - iOS: untested, needs a Mac or a `macos-26` run.
 - A GitHub Actions run of the `_ota` workflows.
