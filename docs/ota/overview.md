@@ -98,7 +98,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 ## Controls
 
 - Each app has its own ID, signing key and channels `production` and `beta`.
-- Apps are added in the [Admin GUI](#admin-gui); an app's ID is its subdomain, e.g. `tf`.
+- An app's ID is its subdomain, e.g. `tf`.
 - Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain, see [Domains](#domains).
 - A device gets the newest active release of its channel with its compatibility key.
 - Rollout: a percentage per release; a device is in when `hash(deviceId + releaseId) % 100 < rollout`, so raising it only adds devices.
@@ -120,8 +120,8 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Served by the OTA server at `maxapp.dev`; plain HTML and JS.
 - Behind Cloudflare Access; no own login.
 - Inspiration: Ionic Appflow's Deploy screens (builds list, channel with deployment history).
-- App switcher at the top, with Add app.
-- Add app: enter ID and name; the browser creates the signing key pair and shows the GitHub secret and variable to copy; the server stores only the public key.
+- One app for now, set in the server's config with its ID, name and public key.
+- Later: app switcher and Add app, with the one-command setup in the [roadmap](../overview.md#roadmap).
 - Shows the selected app's channels and releases: commit, date, rollout, downloaded, active, failed.
 - Actions: set rollout, pause, resume, rollback.
 
