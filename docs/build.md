@@ -63,5 +63,5 @@ GitHub environment variables used by both platforms:
 
 ## Status
 
-- The offline page isn't shown on load errors: the config sets no `server.errorPath`.
+- The offline page isn't shown on load errors: the config sets no `server.errorPath`; more in [bugs.md](bugs.md).
 - Planned: apps run from bundled web files with OTA updates instead of `server.url`: [ota/overview.md](ota/overview.md).

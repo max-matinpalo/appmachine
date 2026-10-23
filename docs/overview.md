@@ -24,6 +24,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 | iOS build | `src/ios.yml` | [ios.md](ios.md) |
 | Android build and keystore | `src/android.yml`, `src/android_keygen.yml` | [android.md](android.md) |
 | OTA updates | — | [ota/overview.md](ota/overview.md) |
+| Known problems | — | [bugs.md](bugs.md) |
 
 ## Native features
 
@@ -42,4 +43,4 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 
 ## Status
 
-Implemented, except [OTA updates](ota/overview.md#status).
+Implemented, except [OTA updates](ota/overview.md#status). Known problems: [bugs.md](bugs.md).
