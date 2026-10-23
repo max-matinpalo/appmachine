@@ -28,6 +28,8 @@ jobs:
       with: { distribution: temurin, java-version: "21" }
 
     - uses: android-actions/setup-android@v3
+      # The default "tools" package no longer exists
+      with: { packages: platform-tools }
 
     - name: 🔎 Preflight Checks
       run: |
