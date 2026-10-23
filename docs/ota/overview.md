@@ -100,14 +100,19 @@ Commands of the `appmachine` npm package; `--channel` defaults to `production`; 
 | Command | Does |
 |---|---|
 | `npx appmachine keys` | Creates the app's signing key pair once |
-| `npx appmachine publish` | Builds the web app, computes the compatibility key, signs the file list, uploads new files, creates the release |
-| `npx appmachine rollout <percent>` | Sets the newest release's rollout |
-| `npx appmachine pause`, `resume`, `rollback` | Controls the newest release |
-| `npx appmachine status` | Shows downloaded, active and failed per release |
+| `npx appmachine publish` | Builds the web app, computes the compatibility key, signs the file list, uploads new files, creates the release with its git commit |
 
 - Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions.
 - Each store build also publishes its bundled version as a release.
-- No dashboard.
+- Controls and status: [Admin GUI](#admin-gui).
+
+## Admin GUI
+
+- Served by the OTA server at `/admin`; plain HTML and JS.
+- Behind Cloudflare Access; no own login.
+- Inspiration: Ionic Appflow's Deploy screens (builds list, channel with deployment history).
+- Shows apps, channels and releases: commit, date, rollout, downloaded, active, failed.
+- Actions: set rollout, pause, resume, rollback.
 
 ## PWA
 
