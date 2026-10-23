@@ -110,7 +110,6 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 - `npx appmachine publish` builds the web app, computes the compatibility key, signs the file list, uploads new files and creates the release with its git commit.
 - `--channel` defaults to `production`; one admin token for our server.
-
 - Tags `web` (production) and `webdev` (beta) run `publish` on GitHub Actions.
 - Each store build also publishes its bundled version as a release.
 - Controls and status: [Admin GUI](#admin-gui).
