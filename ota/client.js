@@ -89,7 +89,7 @@
     // 3. Check for a release or a rollback with this launch's specs, then stage the next launch.
     const hints = await navigator.userAgentData?.getHighEntropyValues(['model', 'platformVersion']).catch(() => {}) || {};
     const query = new URLSearchParams({
-      device: state.device, current: state.trial || state.kept || '', key: APPMACHINE.key,
+      device: state.device, current: state.trial || state.kept || '', key: 'web', // a browser runs releases of every native key
       running: navigator.serviceWorker.controller && (initial.trial && initial.tries > 0 ? initial.trial : initial.kept) || '',
       screen: `${screen.width}x${screen.height}@${+devicePixelRatio.toFixed(2)}`,
       standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? '1' : '0',

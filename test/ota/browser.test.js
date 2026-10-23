@@ -179,3 +179,19 @@ test('WebKit: localhost service worker registration and offline cache launch', a
   assert.equal(await page.locator('h1').textContent(), 'WebKit');
   assert.deepEqual(errors, []);
 });
+
+test('Chromium: a browser updates across releases with different native keys', async t => {
+  const { server, page, errors } = await setup(t);
+  const first = await server.release('One', { key: 'native-a' });
+  await page.goto(server.url);
+  await waitState(page, { trial: first.id, tries: 0 });
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await page.reload();
+  await waitState(page, { kept: first.id, trial: null, tries: 0, reports: [] });
+  const second = await server.release('Two', { key: 'native-b' });
+  await page.reload();
+  await waitState(page, { kept: first.id, trial: second.id, tries: 0 });
+  await page.reload();
+  assert.equal(await page.locator('h1').textContent(), 'Two');
+  assert.deepEqual(errors, []);
+});

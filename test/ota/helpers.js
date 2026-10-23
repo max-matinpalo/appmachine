@@ -85,7 +85,7 @@ export async function stub() {
         if (api.override) return send(200, api.override);
         const current = Number(url.searchParams.get('current'));
         const device = url.searchParams.get('device');
-        const release = [...api.releases].reverse().find(r => r.channel === 'production' && r.key === url.searchParams.get('key') && r.state !== 'rolledback' &&
+        const release = [...api.releases].reverse().find(r => r.channel === 'production' && (r.key === url.searchParams.get('key') || url.searchParams.get('key') === 'web') && r.state !== 'rolledback' &&
           (r.id === current || r.state === 'live' && parseInt(digest(device + r.id).slice(0, 8), 16) % 100 < r.rollout));
         return send(release ? 200 : 204, release);
       }
@@ -101,7 +101,7 @@ export async function stub() {
         return send(bytes ? 200 : 404, bytes || 'missing', mime(name));
       }
       // 3. Network first visits and SPA fallback.
-      const release = [...api.releases].reverse().find(r => r.channel === 'production' && r.state === 'live' && r.key === 'web' && r.rollout === 100);
+      const release = [...api.releases].reverse().find(r => r.channel === 'production' && r.state === 'live' && r.rollout === 100);
       if (!release) return send(404);
       const files = JSON.parse(release.manifest).files;
       let name = decodeURIComponent(path).slice(1);
@@ -117,8 +117,8 @@ export async function stub() {
   await new Promise(resolve => server.listen(0, 'localhost', resolve));
   api.url = `http://localhost:${server.address().port}`;
   api.close = () => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
-  api.release = async (name, { crash = false, extra = {} } = {}) => {
-    const client = `const APPMACHINE = ${JSON.stringify({ key: 'web', publicKey: pair.publicKey })};\n${await readFile(`${root}ota/client.js`, 'utf8')}`;
+  api.release = async (name, { crash = false, extra = {}, key: compatibility = 'web' } = {}) => {
+    const client = `const APPMACHINE = ${JSON.stringify({ key: compatibility, publicKey: pair.publicKey })};\n${await readFile(`${root}ota/client.js`, 'utf8')}`;
     const contents = {
       'index.html': `<!doctype html><html><head><script src="/appmachine.js"></script><script src="/app.js"></script></head><body><h1>${name}</h1></body></html>`,
       'app.js': `window.version = ${JSON.stringify(name)};${crash ? 'throw Error("startup failed");' : ''}`,
@@ -136,7 +136,7 @@ export async function stub() {
     const manifest = JSON.stringify({ files });
     const key = await webcrypto.subtle.importKey('jwk', pair.privateKey, algorithm, false, ['sign']);
     const signature = Buffer.from(await webcrypto.subtle.sign(signing, key, Buffer.from(manifest))).toString('base64');
-    const release = { id: api.releases.length + 1, channel: 'production', key: 'web', manifest, signature, state: 'live', rollout: 100 };
+    const release = { id: api.releases.length + 1, channel: 'production', key: compatibility, manifest, signature, state: 'live', rollout: 100 };
     api.releases.push(release);
     return release;
   };
