@@ -1,12 +1,13 @@
-// App: page shell with the app name and the Releases | Devices views (#devices).
+// App: page shell with the app name and the Releases | Devices | Docs views (#devices, #docs).
 import { useEffect, useState } from 'preact/hooks'
 import { request } from './api/request.js'
 import { Releases } from './releases/Releases.jsx'
 import { Devices } from './devices/Devices.jsx'
+import { Docs } from './docs/Docs.jsx'
 import styles from './App.module.css'
 
-const views = [['releases', 'Releases'], ['devices', 'Devices']]
-const current = () => location.hash === '#devices' ? 'devices' : 'releases'
+const views = [['releases', 'Releases'], ['devices', 'Devices'], ['docs', 'Docs']]
+const current = () => views.find(([value]) => '#' + value === location.hash)?.[0] || 'releases'
 
 export function App() {
   const [app, setApp] = useState(null)
@@ -27,6 +28,6 @@ export function App() {
         {views.map(([value, label]) => <a key={value} href={'#' + value} class={styles.link} aria-current={view === value ? 'page' : undefined}>{label}</a>)}
       </nav>
     </header>
-    {view === 'devices' ? <Devices /> : <Releases />}
+    {view === 'devices' ? <Devices /> : view === 'docs' ? <Docs app={app} /> : <Releases />}
   </main>
 }

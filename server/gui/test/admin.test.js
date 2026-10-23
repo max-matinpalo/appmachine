@@ -360,4 +360,16 @@ for (const [name, engine] of Object.entries({ chromium, webkit })) describe(name
       await page.screenshot({ path: new URL(name + '-devices-' + width + '.png', screenshots).pathname, fullPage: true })
     }
   })
+
+  it('explains how it works in Docs, with the app domains, without overflow', async t => {
+    const { page } = await open(t, { hash: '#docs' })
+    await page.getByRole('heading', { name: 'How it works' }).waitFor()
+    assert.equal(await page.getByRole('link', { name: 'Docs' }).getAttribute('aria-current'), 'page')
+    await page.getByText('https://tf-beta.maxapp.dev').waitFor()
+    assert.deepEqual(await checkLayout(page, page.getByRole('main')), [])
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.screenshot({ path: new URL(name + '-docs-' + width + '.png', screenshots).pathname, fullPage: true })
+    }
+  })
 })
