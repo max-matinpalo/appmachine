@@ -35,6 +35,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 ## Roadmap
 
 - Next: own OTA updates, [ota/overview.md](ota/overview.md).
+- Later: downloadable macOS app (drag to Applications), lighter than Electron.
 
 ## Hosting
 

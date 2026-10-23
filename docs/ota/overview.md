@@ -83,6 +83,13 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 
 ## PWA
 
+The same web app in the browser, optionally installed with its own window and icon; no Capacitor. For now also the desktop app.
+
+1. First visit: our server serves the current production release.
+2. The service worker saves its files in Cache Storage; later launches work offline.
+3. Install (optional): Chrome or Edge "Install app", Safari "Add to Dock" or "Add to Home Screen".
+4. Updates: the shared updater downloads changed files into a new cache; on next launch the service worker serves them as a trial, kept after ready.
+
 Only storage and serving differ per platform; check, download, verify, trial, rollback and reporting are shared.
 
 | | iOS and Android | PWA |
@@ -91,8 +98,7 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 | Serves the active bundle | Capacitor `WebView` base path | Service worker |
 | Compatibility key | Native build hash | `web` |
 
-- The PWA runs in the browser without Capacitor; it is also the desktop app (Windows, macOS, Linux); no desktop wrapper.
-- Our server hosts the web app from the same releases; one publish updates web, PWA, iOS and Android.
+- One publish updates web, PWA, iOS and Android.
 
 ## Status
 
