@@ -20,7 +20,7 @@ Main spec for AppMachine's own over-the-air web updates of Capacitor iOS and And
 - Apps run from bundled local files, not from `APP_SERVER_URL`.
 - One mechanism: iOS, Android and PWA share bundles, server API, channels and updater JS; see [PWA](#pwa).
 - Server: Node.js (MaxServer).
-- Our server serves the bundles; Cloudflare's CDN cache absorbs download load; no object storage.
+- Our server serves the bundles and the web app; Cloudflare's CDN cache absorbs download load; no object storage.
 
 ## Store review
 
@@ -75,6 +75,9 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 - Bundle files have immutable hash URLs: `Cache-Control: public, max-age=31536000, immutable`.
 - A Cloudflare cache rule caches them; by default Cloudflare skips files without known extensions.
 - Update checks are never cached.
+- `index.html`, service worker and web manifest: short cache with `stale-if-error`, so first visits work while the server is down.
+- Cloudflare Tiered Cache on (free): fewer requests reach our server.
+- The server runs behind a Cloudflare Tunnel; no public IP needed.
 - Server down: update checks fail and the app keeps its current bundle.
 - Back up the server's data folder: bundles and release database.
 
@@ -87,6 +90,9 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 | Bundle files | Filesystem, inside the app container | Cache Storage |
 | Serves the active bundle | Capacitor `WebView` base path | Service worker |
 | Compatibility key | Native build hash | `web` |
+
+- The PWA runs in the browser without Capacitor; it is also the desktop app (Windows, macOS, Linux); no desktop wrapper.
+- Our server hosts the web app from the same releases; one publish updates web, PWA, iOS and Android.
 
 ## Status
 
