@@ -97,6 +97,7 @@ Capacitor's built-in `WebView` plugin (verified in Capacitor's source):
 ## Controls
 
 - Each app has its own ID, signing key and channels `production` and `beta`.
+- A new app appears on its first publish; its ID is its subdomain, e.g. `tf`; no server setup.
 - Channel comes from the build: Development builds `beta`, Production builds `production`; a PWA by domain, see [Domains](#domains).
 - A device gets the newest active release of its channel with its compatibility key.
 - Rollout: a percentage per release; a device is in when `hash(deviceId + releaseId) % 100 < rollout`, so raising it only adds devices.
