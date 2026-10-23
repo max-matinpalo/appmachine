@@ -6,6 +6,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 
 - Configure once, push a tag, download a signed app.
 - No Xcode, Android Studio or Capacitor on the developer's machine.
+- Vision: one web app built for every device: iOS, Android, desktop (Tauri) and web.
 - Status: not ready for mainstream use; inspiration for advanced developers.
 
 ## How it works
@@ -35,7 +36,7 @@ npm package that builds signed native iOS and Android apps for a web app with Ca
 ## Roadmap
 
 - Next: own OTA updates, [ota/overview.md](ota/overview.md).
-- Later: downloadable macOS app (drag to Applications), lighter than Electron.
+- Later: desktop apps with Tauri (macOS, Windows, Linux): Mac App Store and `.dmg` download; a small own Tauri part for OTA.
 
 ## Hosting
 

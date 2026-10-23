@@ -19,7 +19,7 @@ Main spec for AppMachine's own over-the-air web updates of Capacitor iOS and And
 - Own updater, mostly JS; the Capgo and Capawesome updater plugins are references only, not used.
 - Apps run from bundled local files, not from `APP_SERVER_URL`.
 - Offline data and features use web APIs (IndexedDB, Cache Storage), the same on all platforms.
-- One mechanism: iOS, Android and PWA share bundles, server API, channels and updater JS; see [PWA](#pwa).
+- One mechanism: iOS, Android, PWA and later desktop (Tauri) share bundles, server API, channels and updater JS; see [PWA](#pwa).
 - Server: Node.js (MaxServer).
 - Our server serves the bundles and the web app; Cloudflare's CDN cache absorbs download load; no object storage.
 
@@ -93,11 +93,11 @@ The same web app in the browser, optionally installed with its own window and ic
 
 Only storage and serving differ per platform; check, download, verify, trial, rollback and reporting are shared.
 
-| | iOS and Android | PWA |
-|---|---|---|
-| Bundle files | Filesystem, inside the app container | Cache Storage |
-| Serves the active bundle | Capacitor `WebView` base path | Service worker |
-| Compatibility key | Native build hash | `web` |
+| | iOS and Android | PWA | Desktop (Tauri, later) |
+|---|---|---|---|
+| Bundle files | Filesystem, inside the app container | Cache Storage | App data folder |
+| Serves the active bundle | Capacitor `WebView` base path | Service worker | Small own Tauri part |
+| Compatibility key | Native build hash | `web` | Native build hash |
 
 - One publish updates web, PWA, iOS and Android.
 - The iOS app can't use a service worker: WebKit allows them only on https sites, and bundled files load from `capacitor://localhost`.
