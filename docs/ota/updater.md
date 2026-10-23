@@ -54,4 +54,4 @@ Shared updater JS and the PWA service worker: check, download, verify, trial, ro
 
 ## Status
 
-Not implemented.
+Implemented.
