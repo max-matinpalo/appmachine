@@ -4,6 +4,8 @@
 	"description": "Native iOS/Android shell generator via GitHub Actions",
 	"author": "Max Matinpalo",
 	"type": "module",
+	"bin": { "appmachine": "bin/appmachine.js" },
+	"files": ["bin", "ota", "scripts", "src", "template"],
 	"scripts": {
 		"postinstall": "node ./scripts/install.js"
 	}

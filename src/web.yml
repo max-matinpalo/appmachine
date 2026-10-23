@@ -1,0 +1,23 @@
+name: AppMachine / Web
+on:
+  push:
+    tags: [web, webdev]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    environment: ${{ github.ref == 'refs/tags/webdev' && 'Development' || 'Production' }}
+    env:
+      OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
+      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      MAXAPP_URL: ${{ vars.MAXAPP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: lts/*, cache: npm }
+      - run: npm ci
+      - run: npx appmachine publish --channel ${{ github.ref == 'refs/tags/webdev' && 'beta' || 'production' }}
