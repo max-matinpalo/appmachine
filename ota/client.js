@@ -1,7 +1,7 @@
 (() => {
   let failed = false;
   addEventListener('error', () => { failed = true; });
-  if (!('serviceWorker' in navigator)) return;
+  if (window.Capacitor?.isNativePlatform?.() || !('serviceWorker' in navigator)) return; // apps: native.js
 
   const stateURL = '/appmachine/state';
   const releaseURL = id => `/appmachine/release/${id}`;
@@ -76,10 +76,10 @@
       await clean(cache, files, state.kept);
     }
 
-    // 2. Flush queued reports; keep them when the network fails.
+    // 2. Flush queued reports (text/plain, as the apps send them); keep them when the network fails.
     if (state.reports.length) {
       const sent = state.reports.length;
-      const response = await fetch('/_ota/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: state.device, reports: state.reports }) });
+      const response = await fetch('/_ota/report', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ device: state.device, reports: state.reports }) });
       if (!response.ok) throw Error('Report failed');
       state = await read(cache);
       state.reports.splice(0, sent);

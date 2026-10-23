@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 import { cli, fixture, stub, root, digest } from './helpers.js';
 
@@ -28,7 +28,7 @@ test('publish builds, signs, uploads missing files and never edits dist', async 
   const result = await cli(['publish', '--channel', 'beta', '--rollout', '35'], app.dir, env);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /app built/);
-  assert.match(result.stdout, /Published release 1 to beta \(35%\)/);
+  assert.match(result.stdout, /Published release 1 to beta \(35%, key web\)/);
   const release = server.releases[0];
   assert.equal(release.key, 'web');
   assert.equal(release.commit, 'test-commit');
@@ -51,6 +51,39 @@ test('publish builds, signs, uploads missing files and never edits dist', async 
   assert.equal(server.uploads.length, 3, 'second publish reuses every file');
   assert.deepEqual(await readdir(`${app.dir}/dist`), [...before.keys()]);
   for (const [name, bytes] of before) assert.deepEqual(await readFile(`${app.dir}/dist/${name}`), bytes);
+});
+
+test('key hashes Capacitor and native plugins; bundle publishes and writes the app config', async t => {
+  const app = await fixture();
+  const server = await stub();
+  t.after(() => app.close());
+  t.after(() => server.close());
+  const pkg = async (name, data) => {
+    await mkdir(`${app.dir}/node_modules/${name}`, { recursive: true });
+    await writeFile(`${app.dir}/node_modules/${name}/package.json`, JSON.stringify(data));
+  };
+  assert.equal((await cli(['key'], app.dir)).stdout.trim(), 'web');
+  await pkg('@capacitor/core', { version: '8.0.0' });
+  await pkg('@capacitor/filesystem', { version: '8.1.0', capacitor: { android: { src: 'android' } } });
+  await pkg('left-pad', { version: '1.0.0' });
+  const key = digest(Buffer.from('@capacitor/core@8.0.0\n@capacitor/filesystem@8.1.0')).slice(0, 16);
+  assert.equal((await cli(['key'], app.dir)).stdout.trim(), key);
+  await pkg('left-pad', { version: '2.0.0' });
+  assert.equal((await cli(['key'], app.dir)).stdout.trim(), key, 'non-native packages do not change the key');
+
+  const env = { OTA_PRIVATE_KEY: JSON.stringify(server.privateKey), MAXAPP_URL: server.url, GITHUB_SHA: 'c' };
+  assert.match((await cli(['bundle'], app.dir, env)).stderr, /APP_SERVER_URL/);
+  const result = await cli(['bundle', '--channel', 'beta'], app.dir, { ...env, APP_SERVER_URL: 'https://tf-beta.example.com/' });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Bundled release 1 into www/);
+  const release = server.releases[0];
+  assert.equal(release.key, key);
+  assert.equal(release.channel, 'beta');
+  const files = JSON.parse(release.manifest).files;
+  assert.match(server.files.get(files['appmachine.js']).toString(), new RegExp(`^const APPMACHINE = \\{"key":"${key}","publicKey":\\{[^}]+\\}\\};`));
+  assert.deepEqual((await readdir(`${app.dir}/www`)).sort(), Object.keys(files).sort());
+  assert.match(await readFile(`${app.dir}/www/appmachine.js`, 'utf8'), new RegExp(`^const APPMACHINE = \\{"key":"${key}","publicKey":\\{[^}]+\\},"server":"https://tf-beta.example.com","bundled":1\\};`));
+  for (const name of ['index.html', 'app.js']) assert.equal(digest(await readFile(`${app.dir}/www/${name}`)), files[name]);
 });
 
 test('publish reports invalid inputs, missing files, Access redirects and API failures', async t => {
