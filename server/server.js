@@ -6,7 +6,7 @@ const server = await maxserver({
   docs: false,
   cors: '',
   public: false,
-  static: undefined,
+  static: false,
   maxRequestBodySize: 100 * 1024 * 1024,
 });
 
