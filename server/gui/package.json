@@ -1,0 +1,17 @@
+{
+  "name": "appmachine-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "npm run build && node --test --test-reporter=spec test/admin.test.js"
+  },
+  "dependencies": {
+    "preact": "^11.0.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
+  }
+}

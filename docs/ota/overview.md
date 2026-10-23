@@ -152,4 +152,4 @@ Only storage and serving differ per platform; check, download, verify, trial, ro
 
 ## Status
 
-In progress: PWA and Admin GUI first, iOS and Android later. The build workflows still load the app from `APP_SERVER_URL`.
+Admin GUI implemented. PWA in progress; iOS and Android later. The build workflows still load the app from `APP_SERVER_URL`.
